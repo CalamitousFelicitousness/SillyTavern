@@ -57,6 +57,8 @@ const getBatchSize = () => ['transformers', 'ollama'].includes(settings.source) 
 const settings = {
     // For both
     source: 'transformers',
+    vectorStorage: 'vectra',
+    similarityMethod: 'cosine',
     alt_endpoint_url: '',
     use_alt_endpoint: false,
     include_wi: false,
@@ -842,6 +844,8 @@ async function getQueryText(chat, initiator) {
  */
 function getVectorsRequestBody(args = {}) {
     const body = Object.assign({}, args);
+    body.vectorStorage = settings.vectorStorage || 'vectra';
+    body.similarityMethod = settings.similarityMethod || 'cosine';
     switch (settings.source) {
         case 'extras':
             body.extrasUrl = extension_settings.apiUrl;
@@ -1221,6 +1225,16 @@ function toggleSettings() {
     $('#siliconflow_vectorsModel').toggle(settings.source === 'siliconflow');
     $('#workers_ai_vectorsModel').toggle(settings.source === 'workers_ai');
     $('#vector_altEndpointUrl').toggle(vectorApiRequiresUrl.includes(settings.source));
+
+    // Vector storage engine settings
+    const isVectra = settings.vectorStorage === 'vectra' || !settings.vectorStorage;
+    $('#vectors_vectra_deprecation_warning').toggle(isVectra);
+    $('#vectors_similarityMethod').prop('disabled', isVectra);
+    if (isVectra) {
+        $('#vectors_similarityMethod').val('cosine');
+        settings.similarityMethod = 'cosine';
+    }
+
     if (settings.source === 'webllm') {
         loadWebLlmModels();
     } else if (settings.source in remoteEmbeddingEndpoints) {
@@ -1674,6 +1688,17 @@ export async function init() {
         Object.assign(extension_settings.vectors, settings);
         saveSettingsDebounced();
         toggleSettings();
+    });
+    $('#vectors_vectorStorage').val(settings.vectorStorage).on('change', () => {
+        settings.vectorStorage = String($('#vectors_vectorStorage').val());
+        Object.assign(extension_settings.vectors, settings);
+        saveSettingsDebounced();
+        toggleSettings();
+    });
+    $('#vectors_similarityMethod').val(settings.similarityMethod).on('change', () => {
+        settings.similarityMethod = String($('#vectors_similarityMethod').val());
+        Object.assign(extension_settings.vectors, settings);
+        saveSettingsDebounced();
     });
     $('#vector_altEndpointUrl_enabled').prop('checked', settings.use_alt_endpoint).on('input', () => {
         settings.use_alt_endpoint = $('#vector_altEndpointUrl_enabled').prop('checked');

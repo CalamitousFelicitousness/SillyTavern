@@ -1,11 +1,13 @@
 import path from 'node:path';
 import fs from 'node:fs';
 
-import vectra from 'vectra';
 import express from 'express';
 import sanitize from 'sanitize-filename';
 
 import { getConfigValue } from '../util.js';
+import { VECTOR_ENGINES, SIMILARITY_METHODS } from '../vectors/vector-store.js';
+import { VectraStore } from '../vectors/vectra-store.js';
+import { PGLiteStore } from '../vectors/pglite-store.js';
 
 import { getNomicAIBatchVector, getNomicAIVector } from '../vectors/nomicai-vectors.js';
 import { getOpenAIVector, getOpenAIBatchVector } from '../vectors/openai-vectors.js';
@@ -290,17 +292,34 @@ function getModelScope(sourceSettings) {
 }
 
 /**
+ * Creates a vector store instance based on the configured engine.
+ * @param {string} engine - The vector storage engine to use ('vectra' or 'pglite')
+ * @returns {(folderPath: string) => import('../vectors/vector-store.js').IVectorStore}
+ */
+function getStoreFactory(engine) {
+    switch (engine) {
+        case VECTOR_ENGINES.PGLITE:
+            return (folderPath) => new PGLiteStore(folderPath);
+        case VECTOR_ENGINES.VECTRA:
+        default:
+            return (folderPath) => new VectraStore(folderPath);
+    }
+}
+
+/**
  * Gets the index for the vector collection
  * @param {import('../users.js').UserDirectoryList} directories - User directories
  * @param {string} collectionId - The collection ID
  * @param {string} source - The source of the vector
  * @param {object} sourceSettings - The model for the source
- * @returns {Promise<vectra.LocalIndex>} - The index for the collection
+ * @param {string} [engine] - The vector storage engine to use
+ * @returns {Promise<import('../vectors/vector-store.js').IVectorStore>} - The index for the collection
  */
-async function getIndex(directories, collectionId, source, sourceSettings) {
+async function getIndex(directories, collectionId, source, sourceSettings, engine) {
     const model = getModelScope(sourceSettings);
     const pathToFile = path.join(directories.vectors, sanitize(source), sanitize(collectionId), sanitize(model));
-    const store = new vectra.LocalIndex(pathToFile);
+    const createStore = getStoreFactory(engine);
+    const store = createStore(pathToFile);
 
     if (!await store.isIndexCreated()) {
         await store.createIndex();
@@ -316,9 +335,10 @@ async function getIndex(directories, collectionId, source, sourceSettings) {
  * @param {string} source - The source of the vector
  * @param {Object} sourceSettings - Settings for the source, if it needs any
  * @param {{ hash: number; text: string; index: number; }[]} items - The items to insert
+ * @param {string} [engine] - The vector storage engine to use
  */
-async function insertVectorItems(directories, collectionId, source, sourceSettings, items) {
-    const store = await getIndex(directories, collectionId, source, sourceSettings);
+async function insertVectorItems(directories, collectionId, source, sourceSettings, items, engine) {
+    const store = await getIndex(directories, collectionId, source, sourceSettings, engine);
 
     await store.beginUpdate();
 
@@ -339,10 +359,11 @@ async function insertVectorItems(directories, collectionId, source, sourceSettin
  * @param {string} collectionId - The collection ID
  * @param {string} source - The source of the vector
  * @param {Object} sourceSettings - Settings for the source, if it needs any
+ * @param {string} [engine] - The vector storage engine to use
  * @returns {Promise<number[]>} - The hashes of the items in the collection
  */
-async function getSavedHashes(directories, collectionId, source, sourceSettings) {
-    const store = await getIndex(directories, collectionId, source, sourceSettings);
+async function getSavedHashes(directories, collectionId, source, sourceSettings, engine) {
+    const store = await getIndex(directories, collectionId, source, sourceSettings, engine);
 
     const items = await store.listItems();
     const hashes = items.map(x => Number(x.metadata.hash));
@@ -357,9 +378,10 @@ async function getSavedHashes(directories, collectionId, source, sourceSettings)
  * @param {string} source - The source of the vector
  * @param {Object} sourceSettings - Settings for the source, if it needs any
  * @param {number[]} hashes - The hashes of the items to delete
+ * @param {string} [engine] - The vector storage engine to use
  */
-async function deleteVectorItems(directories, collectionId, source, sourceSettings, hashes) {
-    const store = await getIndex(directories, collectionId, source, sourceSettings);
+async function deleteVectorItems(directories, collectionId, source, sourceSettings, hashes, engine) {
+    const store = await getIndex(directories, collectionId, source, sourceSettings, engine);
     const items = await store.listItemsByMetadata({ hash: { '$in': hashes } });
 
     await store.beginUpdate();
@@ -380,13 +402,15 @@ async function deleteVectorItems(directories, collectionId, source, sourceSettin
  * @param {string} searchText - The text to search for
  * @param {number} topK - The number of results to return
  * @param {number} threshold - The threshold for the search
+ * @param {string} [engine] - The vector storage engine to use
+ * @param {string} [similarityMethod] - The similarity method to use
  * @returns {Promise<{hashes: number[], metadata: object[]}>} - The metadata of the items that match the search text
  */
-async function queryCollection(directories, collectionId, source, sourceSettings, searchText, topK, threshold) {
-    const store = await getIndex(directories, collectionId, source, sourceSettings);
+async function queryCollection(directories, collectionId, source, sourceSettings, searchText, topK, threshold, engine, similarityMethod) {
+    const store = await getIndex(directories, collectionId, source, sourceSettings, engine);
     const vector = await getVector(source, sourceSettings, searchText, true, directories);
 
-    const result = await store.queryItems(vector, topK);
+    const result = await store.queryItems(vector, topK, similarityMethod);
     const metadata = result.filter(x => x.score >= threshold).map(x => x.item.metadata);
     const hashes = result.map(x => Number(x.item.metadata.hash));
     return { metadata, hashes };
@@ -401,16 +425,18 @@ async function queryCollection(directories, collectionId, source, sourceSettings
  * @param {string} searchText - The text to search for
  * @param {number} topK - The number of results to return
  * @param {number} threshold - The threshold for the search
+ * @param {string} [engine] - The vector storage engine to use
+ * @param {string} [similarityMethod] - The similarity method to use
  *
  * @returns {Promise<Record<string, { hashes: number[], metadata: object[] }>>} - The top K results from each collection
  */
-async function multiQueryCollection(directories, collectionIds, source, sourceSettings, searchText, topK, threshold) {
+async function multiQueryCollection(directories, collectionIds, source, sourceSettings, searchText, topK, threshold, engine, similarityMethod) {
     const vector = await getVector(source, sourceSettings, searchText, true, directories);
     const results = [];
 
     for (const collectionId of collectionIds) {
-        const store = await getIndex(directories, collectionId, source, sourceSettings);
-        const result = await store.queryItems(vector, topK);
+        const store = await getIndex(directories, collectionId, source, sourceSettings, engine);
+        const result = await store.queryItems(vector, topK, similarityMethod);
         results.push(...result.map(result => ({ collectionId, result })));
     }
 
@@ -449,9 +475,10 @@ async function regenerateCorruptedIndexErrorHandler(req, res, error) {
         const collectionId = String(req.body.collectionId);
         const source = String(req.body.source) || 'transformers';
         const sourceSettings = getSourceSettings(source, req);
+        const engine = String(req.body.vectorStorage || VECTOR_ENGINES.VECTRA);
 
         if (collectionId && source) {
-            const index = await getIndex(req.user.directories, collectionId, source, sourceSettings);
+            const index = await getIndex(req.user.directories, collectionId, source, sourceSettings, engine);
             const exists = await index.isIndexCreated();
 
             if (exists) {
@@ -481,8 +508,10 @@ router.post('/query', async (req, res) => {
         const threshold = Number(req.body.threshold) || 0.0;
         const source = String(req.body.source) || 'transformers';
         const sourceSettings = getSourceSettings(source, req);
+        const engine = String(req.body.vectorStorage || VECTOR_ENGINES.VECTRA);
+        const similarityMethod = String(req.body.similarityMethod || SIMILARITY_METHODS.COSINE);
 
-        const results = await queryCollection(req.user.directories, collectionId, source, sourceSettings, searchText, topK, threshold);
+        const results = await queryCollection(req.user.directories, collectionId, source, sourceSettings, searchText, topK, threshold, engine, similarityMethod);
         return res.json(results);
     } catch (error) {
         return regenerateCorruptedIndexErrorHandler(req, res, error);
@@ -501,8 +530,10 @@ router.post('/query-multi', async (req, res) => {
         const threshold = Number(req.body.threshold) || 0.0;
         const source = String(req.body.source) || 'transformers';
         const sourceSettings = getSourceSettings(source, req);
+        const engine = String(req.body.vectorStorage || VECTOR_ENGINES.VECTRA);
+        const similarityMethod = String(req.body.similarityMethod || SIMILARITY_METHODS.COSINE);
 
-        const results = await multiQueryCollection(req.user.directories, collectionIds, source, sourceSettings, searchText, topK, threshold);
+        const results = await multiQueryCollection(req.user.directories, collectionIds, source, sourceSettings, searchText, topK, threshold, engine, similarityMethod);
         return res.json(results);
     } catch (error) {
         return regenerateCorruptedIndexErrorHandler(req, res, error);
@@ -519,8 +550,9 @@ router.post('/insert', async (req, res) => {
         const items = req.body.items.map(x => ({ hash: x.hash, text: x.text, index: x.index }));
         const source = String(req.body.source) || 'transformers';
         const sourceSettings = getSourceSettings(source, req);
+        const engine = String(req.body.vectorStorage || VECTOR_ENGINES.VECTRA);
 
-        await insertVectorItems(req.user.directories, collectionId, source, sourceSettings, items);
+        await insertVectorItems(req.user.directories, collectionId, source, sourceSettings, items, engine);
         return res.sendStatus(200);
     } catch (error) {
         return regenerateCorruptedIndexErrorHandler(req, res, error);
@@ -536,8 +568,9 @@ router.post('/list', async (req, res) => {
         const collectionId = String(req.body.collectionId);
         const source = String(req.body.source) || 'transformers';
         const sourceSettings = getSourceSettings(source, req);
+        const engine = String(req.body.vectorStorage || VECTOR_ENGINES.VECTRA);
 
-        const hashes = await getSavedHashes(req.user.directories, collectionId, source, sourceSettings);
+        const hashes = await getSavedHashes(req.user.directories, collectionId, source, sourceSettings, engine);
         return res.json(hashes);
     } catch (error) {
         return regenerateCorruptedIndexErrorHandler(req, res, error);
@@ -554,8 +587,9 @@ router.post('/delete', async (req, res) => {
         const hashes = req.body.hashes.map(x => Number(x));
         const source = String(req.body.source) || 'transformers';
         const sourceSettings = getSourceSettings(source, req);
+        const engine = String(req.body.vectorStorage || VECTOR_ENGINES.VECTRA);
 
-        await deleteVectorItems(req.user.directories, collectionId, source, sourceSettings, hashes);
+        await deleteVectorItems(req.user.directories, collectionId, source, sourceSettings, hashes, engine);
         return res.sendStatus(200);
     } catch (error) {
         return regenerateCorruptedIndexErrorHandler(req, res, error);

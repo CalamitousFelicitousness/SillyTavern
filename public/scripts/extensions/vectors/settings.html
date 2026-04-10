@@ -6,6 +6,31 @@
         </div>
         <div class="inline-drawer-content">
             <div class="flex-container flexFlowColumn">
+                <label for="vectors_vectorStorage" data-i18n="Vector Storage Engine">
+                    Vector Storage Engine
+                </label>
+                <select id="vectors_vectorStorage" class="text_pole">
+                    <option value="vectra">Vectra (Local JSON)</option>
+                    <option value="pglite">PGlite (PostgreSQL WASM)</option>
+                </select>
+                <div id="vectors_vectra_deprecation_warning" class="flex-container" style="display: none;">
+                    <i class="fa-solid fa-triangle-exclamation" style="color: #ff9800;"></i>
+                    <small class="failure" data-i18n="⚠️ Vectra is deprecated and will be removed in the next release. Please switch to PGlite.">
+                        ⚠️ Vectra is deprecated and will be removed in the next release. Please switch to PGlite.
+                    </small>
+                </div>
+            </div>
+            <div class="flex-container flexFlowColumn">
+                <label for="vectors_similarityMethod" data-i18n="Similarity Search Method">
+                    Similarity Search Method
+                </label>
+                <select id="vectors_similarityMethod" class="text_pole">
+                    <option value="cosine">Cosine Similarity</option>
+                    <option value="l2">L2 (Euclidean) Distance</option>
+                    <option value="inner_product">Inner Product</option>
+                </select>
+            </div>
+            <div class="flex-container flexFlowColumn">
                 <label for="vectors_source" data-i18n="Vectorization Source">
                     Vectorization Source
                 </label>
