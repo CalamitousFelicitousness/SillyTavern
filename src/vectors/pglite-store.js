@@ -64,6 +64,8 @@ export async function closeAllInstances() {
 
 /**
  * Table name used for storing vectors within each PGlite database.
+ * This is a hardcoded constant, safe for direct use in SQL queries.
+ * @type {string}
  */
 const VECTORS_TABLE = 'vectors';
 
@@ -398,14 +400,6 @@ export class PGLiteStore {
                 // Handle operators like { '$in': [...] }
                 for (const [op, operand] of Object.entries(value)) {
                     if (op === '$in' && Array.isArray(operand)) {
-                        const placeholders = operand.map(() => {
-                            params.push(JSON.stringify(operand[paramIndex - params.length - 1 + params.length]));
-                            return `$${paramIndex++}`;
-                        });
-                        // Reset and do it properly
-                        params.length -= placeholders.length;
-                        paramIndex -= placeholders.length;
-
                         const inPlaceholders = [];
                         for (const val of operand) {
                             params.push(JSON.stringify(val));
