@@ -2196,6 +2196,235 @@ workersai.post('/generate', async (request, response) => {
     }
 });
 
+const aihubmix = express.Router();
+
+const AIHUBMIX_API = 'https://aihubmix.com/v1';
+
+aihubmix.post('/models', async (request, response) => {
+    try {
+        const key = readSecret(request.user.directories, SECRET_KEYS.AIHUBMIX);
+
+        if (!key) {
+            console.warn('AIHubMix key not found.');
+            return response.sendStatus(400);
+        }
+
+        const modelsResponse = await fetch(`${AIHUBMIX_API}/models`, {
+            method: 'GET',
+            headers: {
+                'Authorization': `Bearer ${key}`,
+                'Content-Type': 'application/json',
+            },
+        });
+
+        if (!modelsResponse.ok) {
+            console.warn('AIHubMix returned an error while listing models.', modelsResponse.statusText);
+            return response.sendStatus(500);
+        }
+
+        /** @type {any} */
+        const data = await modelsResponse.json();
+        const list = Array.isArray(data?.data) ? data.data : [];
+
+        // AIHubMix's /v1/models endpoint returns a flat list of all model
+        // families (chat, image, video, embedding, etc.) with no modality
+        // metadata. Filter to image and video families by known ID prefix
+        // so the Stable Diffusion dropdown isn't flooded with chat models.
+        const imageOrVideoRe = /^((qianfan|google|doubao|ideogram|bfl)\/)?(dall-e|gpt-image|chatgpt-image|flux|imagen|qwen-image|doubao-seedream|ideogram|irag|ernie-irag|sora-|veo-|wan\d|jimeng-)/i;
+        const filtered = list
+            .filter(m => m?.id && imageOrVideoRe.test(m.id))
+            .map(m => ({ value: m.id, text: m.id }));
+
+        return response.send(filtered);
+    } catch (error) {
+        console.error(error);
+        return response.sendStatus(500);
+    }
+});
+
+aihubmix.post('/generate', async (request, response) => {
+    try {
+        const key = readSecret(request.user.directories, SECRET_KEYS.AIHUBMIX);
+
+        if (!key) {
+            console.warn('AIHubMix key not found.');
+            return response.sendStatus(400);
+        }
+
+        console.debug('AIHubMix image request:', request.body);
+
+        const requestBody = {
+            prompt: request.body.prompt,
+            model: request.body.model,
+            n: request.body.n ?? 1,
+            size: request.body.size,
+            quality: request.body.quality,
+            response_format: 'b64_json',
+        };
+
+        if (request.body.style) {
+            requestBody.style = request.body.style;
+        }
+
+        const result = await fetch(`${AIHUBMIX_API}/images/generations`, {
+            method: 'POST',
+            headers: {
+                'Authorization': `Bearer ${key}`,
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify(requestBody),
+        });
+
+        if (!result.ok) {
+            const text = await result.text();
+            console.warn('AIHubMix returned an error.', text);
+            return response.status(500).send(text);
+        }
+
+        /** @type {any} */
+        const data = await result.json();
+        const first = data?.data?.[0];
+        const base64 = first?.b64_json;
+
+        if (!base64 && first?.url && isValidUrl(first.url)) {
+            const imageResponse = await fetch(first.url);
+            if (!imageResponse.ok) {
+                console.warn('AIHubMix image fetch failed.', imageResponse.statusText);
+                return response.sendStatus(500);
+            }
+            const buffer = await imageResponse.arrayBuffer();
+            return response.send({ image: Buffer.from(buffer).toString('base64'), format: 'png' });
+        }
+
+        if (!base64) {
+            console.warn('AIHubMix returned invalid image data.');
+            return response.sendStatus(500);
+        }
+
+        return response.send({ image: base64, format: 'png' });
+    } catch (error) {
+        console.error(error);
+        return response.sendStatus(500);
+    }
+});
+
+aihubmix.post('/generate-video', async (request, response) => {
+    try {
+        const controller = new AbortController();
+        request.socket.removeAllListeners('close');
+        request.socket.on('close', function () {
+            controller.abort();
+        });
+
+        const key = readSecret(request.user.directories, SECRET_KEYS.AIHUBMIX);
+
+        if (!key) {
+            console.warn('AIHubMix key not found.');
+            return response.sendStatus(400);
+        }
+
+        console.debug('AIHubMix video request:', request.body);
+
+        const jobBody = {
+            model: request.body.model,
+            prompt: request.body.prompt,
+        };
+
+        if (request.body.seconds != null) {
+            jobBody.seconds = String(request.body.seconds);
+        }
+        if (request.body.size) {
+            jobBody.size = request.body.size;
+        }
+        if (request.body.input_reference) {
+            jobBody.input_reference = request.body.input_reference;
+        }
+
+        const jobResponse = await fetch(`${AIHUBMIX_API}/videos`, {
+            method: 'POST',
+            headers: {
+                'Authorization': `Bearer ${key}`,
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify(jobBody),
+            signal: controller.signal,
+        });
+
+        if (!jobResponse.ok) {
+            const text = await jobResponse.text();
+            console.warn('AIHubMix video job failed.', text);
+            return response.status(500).send(text);
+        }
+
+        /** @type {any} */
+        const job = await jobResponse.json();
+        const jobId = job?.id;
+
+        if (!jobId) {
+            console.warn('AIHubMix video job missing id.', job);
+            return response.sendStatus(500);
+        }
+
+        const maxAttempts = 40;
+        const pollInterval = 15000;
+
+        for (let attempt = 0; attempt < maxAttempts; attempt++) {
+            if (controller.signal.aborted) {
+                console.info('AIHubMix video generation aborted by client');
+                return response.status(500).send('Video generation aborted by client');
+            }
+
+            await delay(pollInterval);
+            console.debug(`Polling AIHubMix video job ${jobId}, attempt ${attempt + 1}`);
+
+            const pollResponse = await fetch(`${AIHUBMIX_API}/videos/${jobId}`, {
+                method: 'GET',
+                headers: {
+                    'Authorization': `Bearer ${key}`,
+                },
+            });
+
+            if (!pollResponse.ok) {
+                const text = await pollResponse.text();
+                console.warn('AIHubMix video polling failed.', pollResponse.statusText, text);
+                return response.status(500).send(text);
+            }
+
+            /** @type {any} */
+            const pollResult = await pollResponse.json();
+            console.debug(`AIHubMix video job status: ${pollResult?.status}`);
+
+            if (pollResult?.status === 'failed') {
+                console.warn('AIHubMix video generation failed.', pollResult);
+                return response.status(500).send(pollResult?.error?.message || 'Video generation failed');
+            }
+
+            if (pollResult?.status === 'completed') {
+                const contentResponse = await fetch(`${AIHUBMIX_API}/videos/${jobId}/content`, {
+                    method: 'GET',
+                    headers: {
+                        'Authorization': `Bearer ${key}`,
+                    },
+                });
+
+                if (!contentResponse.ok) {
+                    const text = await contentResponse.text();
+                    console.warn('AIHubMix video content fetch failed.', contentResponse.statusText, text);
+                    return response.status(500).send(text);
+                }
+
+                const contentBuffer = await contentResponse.arrayBuffer();
+                return response.send({ format: 'mp4', data: Buffer.from(contentBuffer).toString('base64') });
+            }
+        }
+
+        return response.status(504).send('AIHubMix video generation timed out.');
+    } catch (error) {
+        console.error(error);
+        return response.sendStatus(500);
+    }
+});
+
 router.use('/comfy', comfy);
 router.use('/comfyrunpod', comfyRunPod);
 router.use('/together', together);
@@ -2213,3 +2442,4 @@ router.use('/xai', xai);
 router.use('/aimlapi', aimlapi);
 router.use('/zai', zai);
 router.use('/workersai', workersai);
+router.use('/aihubmix', aihubmix);

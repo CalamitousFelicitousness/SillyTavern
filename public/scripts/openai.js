@@ -2404,6 +2404,7 @@ function saveModelList(data) {
 
         $('#model_moonshot_select').val(oai_settings.moonshot_model).trigger('change');
     }
+
 }
 
 /**
@@ -6368,6 +6369,9 @@ export function isVideoInliningSupported() {
         'glm-4.5v',
         'glm-4.6v',
         'glm-5v-turbo',
+        // Doubao (Bytedance)
+        'doubao-seed-2-0',
+        'doubao-seed-1-6-vision',
     ];
 
     switch (oai_settings.chat_completion_source) {
@@ -6379,6 +6383,8 @@ export function isVideoInliningSupported() {
             return (Array.isArray(model_list) && model_list.find(m => m.id === oai_settings.openrouter_model)?.architecture?.input_modalities?.includes('video'));
         case chat_completion_sources.ZAI:
             return videoSupportedModels.some(model => oai_settings.zai_model.includes(model));
+        case chat_completion_sources.CUSTOM:
+            return true;
         default:
             return false;
     }

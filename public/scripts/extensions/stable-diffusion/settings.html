@@ -41,6 +41,7 @@
             </label>
             <label for="sd_source" data-i18n="Source">Source</label>
             <select id="sd_source" class="text_pole">
+                <option value="aihubmix">AIHubMix</option>
                 <option value="aimlapi">AI/ML API</option>
                 <option value="bfl">BFL (Black Forest Labs)</option>
                 <option value="chutes">Chutes</option>
@@ -131,6 +132,17 @@
             <div data-sd-source="nanogpt">
                 <i data-i18n="Hint: Save an API key in the NanoGPT (Chat Completion) API settings to use it here.">Hint: Save an API key in the NanoGPT (Chat Completion) API settings to use it here.</i>
             </div>
+            <div data-sd-source="aihubmix">
+                <a href="https://aihubmix.com">AIHubMix</a>
+                <div class="flex-container flexnowrap alignItemsBaseline marginBot5">
+                    <strong class="flex1" data-i18n="API Key">API Key</strong>
+                    <div id="sd_aihubmix_key" class="menu_button menu_button_icon manage-api-keys" data-key="api_key_aihubmix">
+                        <i class="fa-fw fa-solid fa-key"></i>
+                        <span data-i18n="Click to set">Click to set</span>
+                    </div>
+                </div>
+                <i data-i18n="Both image and video models are supported. Video generation runs asynchronously.">Both image and video models are supported. Video generation runs asynchronously.</i>
+            </div>
             <div data-sd-source="vlad">
                 <label for="sd_vlad_url">SD.Next API URL</label>
                 <div class="flex-container flexnowrap">
@@ -214,7 +226,7 @@
                         </select>
                     </div>
                 </div>
-                <div data-sd-model="sora-2,sora-2-pro" class="flex-container">
+                <div data-sd-model="sora-2,sora-2-pro,veo-,wan2,jimeng-" class="flex-container">
                     <div class="flex1">
                         <label for="sd_openai_duration" data-i18n="Duration">Duration</label>
                         <select id="sd_openai_duration" class="text_pole">

@@ -95,6 +95,7 @@ const sources = {
     zai: 'zai',
     openrouter: 'openrouter',
     workersai: 'workersai',
+    aihubmix: 'aihubmix',
 };
 const comfyTypes = {
     standard: 'standard',
@@ -1746,6 +1747,9 @@ async function loadSamplers() {
         case sources.workersai:
             samplers = ['N/A'];
             break;
+        case sources.aihubmix:
+            samplers = ['N/A'];
+            break;
     }
 
     for (const sampler of samplers) {
@@ -1999,6 +2003,9 @@ async function loadModels() {
         case sources.workersai:
             models = await loadWorkersAIImageModels();
             break;
+        case sources.aihubmix:
+            models = await loadAihubmixModels();
+            break;
     }
 
     if (extension_settings.sd.source === sources.electronhub) {
@@ -2247,6 +2254,24 @@ async function loadNanoGPTModels() {
     }
 
     const result = await fetch('/api/sd/nanogpt/models', {
+        method: 'POST',
+        headers: getRequestHeaders({ omitContentType: true }),
+    });
+
+    if (result.ok) {
+        return await result.json();
+    }
+
+    return [];
+}
+
+async function loadAihubmixModels() {
+    if (!secret_state[SECRET_KEYS.AIHUBMIX]) {
+        console.debug('AIHubMix API key is not set.');
+        return [];
+    }
+
+    const result = await fetch('/api/sd/aihubmix/models', {
         method: 'POST',
         headers: getRequestHeaders({ omitContentType: true }),
     });
@@ -2643,6 +2668,9 @@ async function loadSchedulers() {
         case sources.workersai:
             schedulers = ['N/A'];
             break;
+        case sources.aihubmix:
+            schedulers = ['N/A'];
+            break;
     }
 
     for (const scheduler of schedulers) {
@@ -2764,6 +2792,9 @@ async function loadVaes() {
             vaes = ['N/A'];
             break;
         case sources.workersai:
+            vaes = ['N/A'];
+            break;
+        case sources.aihubmix:
             vaes = ['N/A'];
             break;
     }
@@ -3417,6 +3448,9 @@ async function sendGenerationRequest(generationType, prompt, additionalNegativeP
                 break;
             case sources.workersai:
                 result = await generateWorkersAIImage(prefixedPrompt, negativePrompt, signal);
+                break;
+            case sources.aihubmix:
+                result = await generateAihubmixImage(prefixedPrompt, signal);
                 break;
         }
 
@@ -4422,6 +4456,71 @@ async function generateElectronHubImage(prompt, signal) {
 }
 
 /**
+ * Generates an image or video via AIHubMix.
+ * Routes to the OpenAI-compatible /v1/images/generations endpoint for images
+ * and the asynchronous /v1/videos polling endpoint for video. Video model IDs
+ * are detected by regex over the selected model name.
+ * @param {string} prompt - The main instruction used to guide the generation.
+ * @param {AbortSignal} signal - An AbortSignal object that can be used to cancel the request.
+ * @returns {Promise<{format: string, data: string}>} - Resolves with the generated media.
+ */
+async function generateAihubmixImage(prompt, signal) {
+    const model = String(extension_settings.sd.model || '');
+    const isVideo = /^(sora-|veo-|wan\d|jimeng-)/i.test(model);
+
+    if (isVideo) {
+        const aspectRatio = extension_settings.sd.width / extension_settings.sd.height;
+        const width = aspectRatio >= 1 ? 1280 : 720;
+        const height = aspectRatio >= 1 ? 720 : 1280;
+
+        const videoResult = await fetch('/api/sd/aihubmix/generate-video', {
+            method: 'POST',
+            headers: getRequestHeaders(),
+            signal: signal,
+            body: JSON.stringify({
+                prompt: prompt,
+                model: model,
+                size: `${width}x${height}`,
+                seconds: extension_settings.sd.openai_duration,
+            }),
+        });
+
+        if (!videoResult.ok) {
+            throw new Error(await videoResult.text());
+        }
+
+        const { format, data } = await videoResult.json();
+        return { format, data };
+    }
+
+    const isDalle3 = /dall-e-3/i.test(model);
+    const isGptImg = /gpt-image/i.test(model);
+
+    const size = `${extension_settings.sd.width}x${extension_settings.sd.height}`;
+
+    const result = await fetch('/api/sd/aihubmix/generate', {
+        method: 'POST',
+        headers: getRequestHeaders(),
+        signal: signal,
+        body: JSON.stringify({
+            prompt: prompt,
+            model: model,
+            size: size,
+            n: 1,
+            quality: isDalle3 ? extension_settings.sd.openai_quality : (isGptImg ? extension_settings.sd.openai_quality_gpt : undefined),
+            style: isDalle3 ? extension_settings.sd.openai_style : undefined,
+        }),
+    });
+
+    if (!result.ok) {
+        throw new Error(await result.text());
+    }
+
+    const data = await result.json();
+    return { format: data?.format || 'png', data: data?.image };
+}
+
+/**
  * Generates an image using the NanoGPT API.
  * @param {string} prompt - The main instruction used to guide the image generation.
  * @param {string} negativePrompt - The instruction used to restrict the image generation.
@@ -5131,6 +5230,8 @@ function isValidState() {
             return secret_state[SECRET_KEYS.OPENROUTER];
         case sources.workersai:
             return !!oai_settings.workers_ai_account_id && secret_state[SECRET_KEYS.WORKERS_AI];
+        case sources.aihubmix:
+            return secret_state[SECRET_KEYS.AIHUBMIX];
         default:
             return false;
     }
