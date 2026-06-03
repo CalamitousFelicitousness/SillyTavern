@@ -290,6 +290,9 @@ export async function forwardResponsesStream(from, to, model) {
      * @param {string|null} reason finish_reason (or null).
      */
     const writeChunk = (delta, reason = null) => {
+        if (to.writableEnded || !to.writable) {
+            return;
+        }
         /** @type {any} */
         const chunk = {
             id: responseId,
@@ -402,9 +405,11 @@ export async function forwardResponsesStream(from, to, model) {
 
     const body = /** @type {any} */ (from.body);
 
+    // If the client disconnects (e.g. generation stopped or swiped away), tear down the
+    // upstream stream. We deliberately do NOT call to.end() here: the for-await loop below
+    // will exit and the terminating block ends the response once, guarded by writableEnded.
     to.socket?.on('close', function () {
         if (body instanceof Readable) body.destroy();
-        to.end();
     });
 
     try {
@@ -416,6 +421,12 @@ export async function forwardResponsesStream(from, to, model) {
         drainBuffer();
     } catch (error) {
         console.warn('Responses API stream interrupted:', error?.message || error);
+    }
+
+    // The client may have already closed the connection while we were streaming; in that
+    // case the response is ended/unwritable and writing again throws ERR_STREAM_WRITE_AFTER_END.
+    if (to.writableEnded || !to.writable) {
+        return;
     }
 
     // Emit a terminating chunk (with usage if we captured it) and the SSE sentinel.
@@ -430,10 +441,14 @@ export async function forwardResponsesStream(from, to, model) {
     if (usage) {
         finalChunk.usage = usage;
     }
-    to.write(`data: ${JSON.stringify(finalChunk)}\n\n`);
-    to.write('data: [DONE]\n\n');
-    console.info('Responses streaming request finished');
-    to.end();
+    try {
+        to.write(`data: ${JSON.stringify(finalChunk)}\n\n`);
+        to.write('data: [DONE]\n\n');
+        console.info('Responses streaming request finished');
+        to.end();
+    } catch (error) {
+        console.warn('Failed to finalize Responses API stream:', error?.message || error);
+    }
 }
 
 /**
