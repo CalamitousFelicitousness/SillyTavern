@@ -652,7 +652,7 @@
                                         <input type="number" id="openai_max_tokens" name="openai_max_tokens" class="text_pole" min="1" max="128000" step="1">
                                     </div>
                                 </div>
-                                <div class="range-block" data-source="openai,custom,xai,aimlapi,moonshot,azure_openai">
+                                <div class="range-block" data-source="openai,custom,xai,aimlapi,moonshot,linkapi,azure_openai">
                                     <div class="range-block-title" data-i18n="Multiple swipes per generation">
                                         Multiple swipes per generation
                                     </div>
@@ -697,7 +697,7 @@
                                         </span>
                                     </div>
                                 </div>
-                                <div class="range-block" data-source="openai,claude,aimlapi,openrouter,ai21,makersuite,vertexai,mistralai,custom,cohere,perplexity,groq,siliconflow,minimax,electronhub,chutes,nanogpt,deepseek,xai,pollinations,moonshot,fireworks,cometapi,azure_openai,zai,workers_ai">
+                                <div class="range-block" data-source="openai,claude,aimlapi,openrouter,ai21,makersuite,vertexai,mistralai,custom,cohere,perplexity,groq,siliconflow,minimax,electronhub,chutes,nanogpt,deepseek,xai,pollinations,moonshot,linkapi,fireworks,cometapi,azure_openai,zai,workers_ai">
                                     <div class="range-block-title" data-i18n="Temperature">
                                         Temperature
                                     </div>
@@ -710,7 +710,7 @@
                                         </div>
                                     </div>
                                 </div>
-                                <div class="range-block" data-source="openai,aimlapi,openrouter,custom,cohere,perplexity,groq,siliconflow,mistralai,electronhub,nanogpt,deepseek,xai,pollinations,moonshot,fireworks,cometapi,azure_openai,chutes,workers_ai">
+                                <div class="range-block" data-source="openai,aimlapi,openrouter,custom,cohere,perplexity,groq,siliconflow,mistralai,electronhub,nanogpt,deepseek,xai,pollinations,moonshot,linkapi,fireworks,cometapi,azure_openai,chutes,workers_ai">
                                     <div class="range-block-title" data-i18n="Frequency Penalty">
                                         Frequency Penalty
                                     </div>
@@ -723,7 +723,7 @@
                                         </div>
                                     </div>
                                 </div>
-                                <div class="range-block" data-source="openai,aimlapi,openrouter,custom,cohere,perplexity,groq,siliconflow,mistralai,electronhub,nanogpt,deepseek,xai,pollinations,moonshot,fireworks,cometapi,azure_openai,chutes,workers_ai">
+                                <div class="range-block" data-source="openai,aimlapi,openrouter,custom,cohere,perplexity,groq,siliconflow,mistralai,electronhub,nanogpt,deepseek,xai,pollinations,moonshot,linkapi,fireworks,cometapi,azure_openai,chutes,workers_ai">
                                     <div class="range-block-title" data-i18n="Presence Penalty">
                                         Presence Penalty
                                     </div>
@@ -749,7 +749,7 @@
                                         </div>
                                     </div>
                                 </div>
-                                <div class="range-block" data-source="openai,claude,aimlapi,openrouter,ai21,makersuite,vertexai,mistralai,custom,cohere,perplexity,groq,siliconflow,minimax,electronhub,chutes,nanogpt,deepseek,xai,pollinations,moonshot,fireworks,cometapi,azure_openai,zai,workers_ai">
+                                <div class="range-block" data-source="openai,claude,aimlapi,openrouter,ai21,makersuite,vertexai,mistralai,custom,cohere,perplexity,groq,siliconflow,minimax,electronhub,chutes,nanogpt,deepseek,xai,pollinations,moonshot,linkapi,fireworks,cometapi,azure_openai,zai,workers_ai">
                                     <div class="range-block-title" data-i18n="Top P">
                                         Top P
                                     </div>
@@ -2000,7 +2000,7 @@
                                             </b>
                                         </div>
                                     </div>
-                                    <div class="range-block" data-source="openai,cohere,mistralai,custom,claude,aimlapi,openrouter,groq,siliconflow,minimax,deepseek,makersuite,vertexai,ai21,xai,pollinations,moonshot,fireworks,cometapi,electronhub,chutes,azure_openai,zai,nanogpt,workers_ai">
+                                    <div class="range-block" data-source="openai,cohere,mistralai,custom,claude,aimlapi,openrouter,groq,siliconflow,minimax,deepseek,makersuite,vertexai,ai21,xai,pollinations,moonshot,linkapi,fireworks,cometapi,electronhub,chutes,azure_openai,zai,nanogpt,workers_ai">
                                         <label for="openai_function_calling" class="checkbox_label flexWrap widthFreeExpand">
                                             <input id="openai_function_calling" type="checkbox" />
                                             <span data-i18n="Enable function calling">Enable function calling</span>
@@ -2053,7 +2053,7 @@
                                             </em>
                                         </div>
                                     </div>
-                                    <div class="range-block" data-source="openai,aimlapi,openrouter,mistralai,makersuite,vertexai,claude,custom,xai,pollinations,moonshot,cohere,cometapi,nanogpt,electronhub,azure_openai,zai,siliconflow,chutes,workers_ai">
+                                    <div class="range-block" data-source="openai,aimlapi,openrouter,mistralai,makersuite,vertexai,claude,custom,xai,pollinations,moonshot,linkapi,cohere,cometapi,nanogpt,electronhub,azure_openai,zai,siliconflow,chutes,workers_ai">
                                         <label for="openai_media_inlining" class="checkbox_label flexWrap widthFreeExpand">
                                             <input id="openai_media_inlining" type="checkbox" />
                                             <span data-i18n="Send inline media">Send inline media</span>
@@ -2077,7 +2077,7 @@
                                             <strong data-source="makersuite,vertexai" data-i18n="video_inlining_hint_4">Videos must be less than 20 MB and under 1 minute long.</strong>
                                             <strong data-source="makersuite,vertexai" data-i18n="audio_inlining_hint_2">Audio must be less than 20 MB.</strong>
                                         </div>
-                                        <div class="flex-container flexFlowColumn wide100p textAlignCenter marginTop10" data-source="openai,custom,xai,pollinations,cohere,cometapi,nanogpt,moonshot,aimlapi,openrouter,mistralai,electronhub,azure_openai,zai,siliconflow,chutes,makersuite,vertexai,workers_ai">
+                                        <div class="flex-container flexFlowColumn wide100p textAlignCenter marginTop10" data-source="openai,custom,xai,pollinations,cohere,cometapi,nanogpt,moonshot,linkapi,aimlapi,openrouter,mistralai,electronhub,azure_openai,zai,siliconflow,chutes,makersuite,vertexai,workers_ai">
                                             <div class="flex-container oneline-dropdown">
                                                 <label for="openai_inline_image_quality" data-i18n="Inline Image Quality">
                                                     Inline Image Quality
@@ -2138,7 +2138,7 @@
                                             </div>
                                         </div>
                                     </div>
-                                    <div class="range-block" data-source="deepseek,aimlapi,openrouter,custom,claude,xai,makersuite,vertexai,pollinations,moonshot,mistralai,fireworks,cometapi,electronhub,chutes,azure_openai,nanogpt,zai,workers_ai">
+                                    <div class="range-block" data-source="deepseek,aimlapi,openrouter,custom,claude,xai,makersuite,vertexai,pollinations,moonshot,linkapi,mistralai,fireworks,cometapi,electronhub,chutes,azure_openai,nanogpt,zai,workers_ai">
                                         <label for="openai_show_thoughts" class="checkbox_label widthFreeExpand">
                                             <input id="openai_show_thoughts" type="checkbox" />
                                             <span data-i18n="Request model reasoning">Request model reasoning</span>
@@ -2147,15 +2147,15 @@
                                             <span data-i18n="Allows the model to return its thinking process.">
                                                 Allows the model to return its thinking process.
                                             </span>
-                                            <strong data-i18n="This setting enables or disables reasoning generation by the model." data-source="deepseek,zai,moonshot">
+                                            <strong data-i18n="This setting enables or disables reasoning generation by the model." data-source="deepseek,zai,moonshot,linkapi">
                                                 This setting enables or disables reasoning generation by the model.
                                             </strong>
-                                            <strong data-i18n="This setting affects visibility only." data-source-mode="except" data-source="zai,moonshot,openrouter,deepseek">
+                                            <strong data-i18n="This setting affects visibility only." data-source-mode="except" data-source="zai,moonshot,linkapi,openrouter,deepseek">
                                                 This setting affects visibility only.
                                             </strong>
                                         </div>
                                     </div>
-                                    <div class="flex-container flexFlowColumn wide100p textAlignCenter marginTop10" data-source="openai,custom,claude,xai,makersuite,vertexai,aimlapi,openrouter,pollinations,perplexity,cometapi,electronhub,azure_openai,chutes,nanogpt,deepseek,fireworks">
+                                    <div class="flex-container flexFlowColumn wide100p textAlignCenter marginTop10" data-source="openai,custom,claude,xai,makersuite,vertexai,aimlapi,openrouter,pollinations,perplexity,cometapi,electronhub,azure_openai,chutes,nanogpt,deepseek,fireworks,linkapi">
                                         <div class="flex-container oneline-dropdown" title="Constrains effort on reasoning for reasoning models.&#10;Reducing reasoning effort can result in faster responses and fewer tokens used on reasoning in a response." data-i18n="[title]Constrains effort on reasoning for reasoning models.">
                                             <label for="openai_reasoning_effort">
                                                 <span data-i18n="Reasoning Effort">Reasoning Effort</span>
@@ -2192,7 +2192,7 @@
                                             </div>
                                         </div>
                                     </div>
-                                    <div class="flex-container flexFlowColumn wide100p textAlignCenter marginTop10" data-source="openai,custom,openrouter,claude">
+                                    <div class="flex-container flexFlowColumn wide100p textAlignCenter marginTop10" data-source="openai,custom,openrouter,claude,linkapi">
                                         <div class="flex-container oneline-dropdown">
                                             <label for="openai_verbosity">
                                                 <span data-i18n="Verbosity">Verbosity</span>
@@ -2943,6 +2943,7 @@
                                 <option value="mistralai">MistralAI</option>
                                 <option value="minimax">MiniMax</option>
                                 <option value="moonshot">Moonshot AI</option>
+                                <option value="linkapi">LinkAPI</option>
                                 <option value="nanogpt">NanoGPT</option>
                                 <option value="openrouter">OpenRouter</option>
                                 <option value="perplexity">Perplexity</option>
@@ -2952,7 +2953,7 @@
                                 <option value="zai">Z.AI (GLM)</option>
                             </optgroup>
                         </select>
-                        <div class="inline-drawer wide100p" data-source="openai,claude,mistralai,makersuite,vertexai,deepseek,xai,zai,moonshot">
+                        <div class="inline-drawer wide100p" data-source="openai,claude,mistralai,makersuite,vertexai,deepseek,xai,zai,moonshot,linkapi">
                             <div class="inline-drawer-toggle inline-drawer-header">
                                 <b data-i18n="Reverse Proxy">Reverse Proxy</b>
                                 <div class="fa-solid fa-circle-chevron-down inline-drawer-icon down"></div>
@@ -3016,7 +3017,7 @@
                                 </div>
                             </div>
                         </div>
-                        <div id="ReverseProxyWarningMessage" data-source="openai,claude,mistralai,makersuite,vertexai,deepseek,xai,zai,moonshot">
+                        <div id="ReverseProxyWarningMessage" data-source="openai,claude,mistralai,makersuite,vertexai,deepseek,xai,zai,moonshot,linkapi">
                             <div class="reverse_proxy_warning">
                                 <b>
                                     <div data-i18n="Using a proxy that you're not running yourself is a risk to your data privacy.">
@@ -3920,6 +3921,31 @@
                                 <option value="moonshot-v1-128k-vision-preview">moonshot-v1-128k-vision-preview</option>
                                 <option value="kimi-thinking-preview">kimi-thinking-preview</option>
                             </select>
+                        </div>
+                        <div id="linkapi_form" data-source="linkapi">
+                            <h4>
+                                <a data-i18n="LinkAPI API Key" href="https://linkapi.ai" target="_blank" rel="noopener noreferrer">
+                                    LinkAPI API Key
+                                </a>
+                            </h4>
+                            <div class="flex-container">
+                                <input id="api_key_linkapi" name="api_key_linkapi" class="text_pole flex1" value="" type="text" autocomplete="off">
+                                <div title="Manage API keys" data-i18n="[title]Manage API keys" class="menu_button fa-solid fa-key fa-fw manage-api-keys" data-key="api_key_linkapi"></div>
+                            </div>
+                            <div data-for="api_key_linkapi" class="neutral_warning" data-i18n="For privacy reasons, your API key will be hidden after you click 'Connect'.">
+                                For privacy reasons, your API key will be hidden after you click 'Connect'.
+                            </div>
+                            <h4 data-i18n="LinkAPI Model">LinkAPI Model</h4>
+                            <select id="model_linkapi_select">
+                                <option value="gpt-5.5-pro">gpt-5.5-pro</option>
+                            </select>
+                            <h4 data-i18n="Responses API model pattern">Responses API model pattern</h4>
+                            <div class="flex-container">
+                                <input id="linkapi_responses_pattern" name="linkapi_responses_pattern" class="text_pole flex1" value="" type="text" autocomplete="off" placeholder="-pro$|deep-research|^o[0-9]">
+                            </div>
+                            <div class="neutral_warning" data-i18n="Models whose ID matches this regular expression are routed through the OpenAI Responses API (/v1/responses) instead of /v1/chat/completions. Leave empty to disable.">
+                                Models whose ID matches this regular expression are routed through the OpenAI Responses API (/v1/responses) instead of /v1/chat/completions. Leave empty to disable.
+                            </div>
                         </div>
                         <div id="zai_form" data-source="zai">
                             <h4>

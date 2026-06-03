@@ -71,6 +71,7 @@ export const SECRET_KEYS = {
     VOLCENGINE_ACCESS_KEY: 'volcengine_access_key',
     WORKERS_AI: 'api_key_workers_ai',
     AIHUBMIX: 'api_key_aihubmix',
+    LINKAPI: 'api_key_linkapi',
 };
 
 /**

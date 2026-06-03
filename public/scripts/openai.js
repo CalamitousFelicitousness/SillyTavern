@@ -194,6 +194,7 @@ export const chat_completion_sources = {
     XAI: 'xai',
     POLLINATIONS: 'pollinations',
     MOONSHOT: 'moonshot',
+    LINKAPI: 'linkapi',
     FIREWORKS: 'fireworks',
     COMETAPI: 'cometapi',
     AZURE_OPENAI: 'azure_openai',
@@ -344,6 +345,8 @@ export const settingsToUpdate = {
     pollinations_model: ['#model_pollinations_select', 'pollinations_model', false, true],
     pollinations_endpoint: ['#pollinations_endpoint', 'pollinations_endpoint', false, true],
     moonshot_model: ['#model_moonshot_select', 'moonshot_model', false, true],
+    linkapi_model: ['#model_linkapi_select', 'linkapi_model', false, true],
+    linkapi_responses_pattern: ['#linkapi_responses_pattern', 'linkapi_responses_pattern', false, true],
     fireworks_model: ['#model_fireworks_select', 'fireworks_model', false, true],
     cometapi_model: ['#model_cometapi_select', 'cometapi_model', false, true],
     custom_model: ['#custom_model_id', 'custom_model', false, true],
@@ -462,6 +465,8 @@ const default_settings = {
     pollinations_endpoint: POLLINATIONS_ENDPOINT.AUTHENTICATED,
     cometapi_model: 'gpt-4o',
     moonshot_model: 'kimi-latest',
+    linkapi_model: 'gpt-5.5-pro',
+    linkapi_responses_pattern: '-pro$|deep-research|^o[0-9]',
     fireworks_model: 'accounts/fireworks/models/kimi-k2-instruct',
     zai_model: 'glm-4.6',
     zai_endpoint: ZAI_ENDPOINT.COMMON,
@@ -1767,6 +1772,8 @@ export function getChatCompletionModel(settings = null) {
             return settings.cometapi_model;
         case chat_completion_sources.MOONSHOT:
             return settings.moonshot_model;
+        case chat_completion_sources.LINKAPI:
+            return settings.linkapi_model;
         case chat_completion_sources.FIREWORKS:
             return settings.fireworks_model;
         case chat_completion_sources.AZURE_OPENAI:
@@ -2405,6 +2412,19 @@ function saveModelList(data) {
         $('#model_moonshot_select').val(oai_settings.moonshot_model).trigger('change');
     }
 
+    if (oai_settings.chat_completion_source == chat_completion_sources.LINKAPI) {
+        $('#model_linkapi_select').empty();
+        model_list.forEach((model) => {
+            $('#model_linkapi_select').append(new Option(model.id, model.id));
+        });
+
+        const selectedModel = model_list.find(model => model.id === oai_settings.linkapi_model);
+        if (model_list.length > 0 && (!selectedModel || !oai_settings.linkapi_model)) {
+            oai_settings.linkapi_model = model_list[0].id;
+        }
+
+        $('#model_linkapi_select').val(oai_settings.linkapi_model).trigger('change');
+    }
 }
 
 /**
@@ -2743,6 +2763,7 @@ export async function createGenerationParameters(settings, model, type, messages
         chat_completion_sources.XAI,
         chat_completion_sources.ZAI,
         chat_completion_sources.MOONSHOT,
+        chat_completion_sources.LINKAPI,
     ];
 
     // Sources that support logprobs
@@ -3040,6 +3061,11 @@ export async function createGenerationParameters(settings, model, type, messages
         }
     }
 
+    // LinkAPI routes models matching this pattern through the Responses API (server-side).
+    if (settings.chat_completion_source === chat_completion_sources.LINKAPI) {
+        generate_data.linkapi_responses_pattern = settings.linkapi_responses_pattern;
+    }
+
     if (seedSupportedSources.includes(settings.chat_completion_source) && settings.seed >= 0) {
         generate_data.seed = settings.seed;
     }
@@ -3274,7 +3300,7 @@ export function getStreamingReply(data, state, { chatCompletionSource = null, ov
             }
         });
         return data.choices?.[0]?.delta?.content ?? data.choices?.[0]?.message?.content ?? data.choices?.[0]?.text ?? '';
-    } else if ([chat_completion_sources.CUSTOM, chat_completion_sources.POLLINATIONS, chat_completion_sources.AIMLAPI, chat_completion_sources.MOONSHOT, chat_completion_sources.COMETAPI, chat_completion_sources.ELECTRONHUB, chat_completion_sources.NANOGPT, chat_completion_sources.ZAI, chat_completion_sources.SILICONFLOW, chat_completion_sources.CHUTES, chat_completion_sources.WORKERS_AI, chat_completion_sources.FIREWORKS].includes(chat_completion_source)) {
+    } else if ([chat_completion_sources.CUSTOM, chat_completion_sources.POLLINATIONS, chat_completion_sources.AIMLAPI, chat_completion_sources.MOONSHOT, chat_completion_sources.LINKAPI, chat_completion_sources.COMETAPI, chat_completion_sources.ELECTRONHUB, chat_completion_sources.NANOGPT, chat_completion_sources.ZAI, chat_completion_sources.SILICONFLOW, chat_completion_sources.CHUTES, chat_completion_sources.WORKERS_AI, chat_completion_sources.FIREWORKS].includes(chat_completion_source)) {
         if (show_thoughts) {
             state.reasoning +=
                 data.choices?.filter(x => x?.delta?.reasoning_content)?.[0]?.delta?.reasoning_content ??
@@ -4488,6 +4514,7 @@ async function getStatusOpen() {
         chat_completion_sources.XAI,
         chat_completion_sources.ZAI,
         chat_completion_sources.MOONSHOT,
+        chat_completion_sources.LINKAPI,
     ];
     if (oai_settings.reverse_proxy && validateProxySources.includes(oai_settings.chat_completion_source)) {
         await validateReverseProxy();
@@ -5639,6 +5666,15 @@ async function onModelChange() {
         oai_settings.moonshot_model = value;
     }
 
+    if ($(this).is('#model_linkapi_select')) {
+        if (!value || !hasModelsLoaded) {
+            console.debug('Null LinkAPI model selected. Ignoring.');
+            return;
+        }
+        console.log('LinkAPI model changed to', value);
+        oai_settings.linkapi_model = value;
+    }
+
     if ($(this).is('#model_fireworks_select')) {
         if (!value || !hasModelsLoaded) {
             console.debug('Null Fireworks model selected. Ignoring.');
@@ -6042,6 +6078,7 @@ async function onConnectButtonClick(e) {
         [chat_completion_sources.XAI]: { key: SECRET_KEYS.XAI, selector: '#api_key_xai', proxy: true },
         [chat_completion_sources.AIMLAPI]: { key: SECRET_KEYS.AIMLAPI, selector: '#api_key_aimlapi', proxy: false },
         [chat_completion_sources.MOONSHOT]: { key: SECRET_KEYS.MOONSHOT, selector: '#api_key_moonshot', proxy: true },
+        [chat_completion_sources.LINKAPI]: { key: SECRET_KEYS.LINKAPI, selector: '#api_key_linkapi', proxy: true },
         [chat_completion_sources.FIREWORKS]: { key: SECRET_KEYS.FIREWORKS, selector: '#api_key_fireworks', proxy: false },
         [chat_completion_sources.COMETAPI]: { key: SECRET_KEYS.COMETAPI, selector: '#api_key_cometapi', proxy: false },
         [chat_completion_sources.AZURE_OPENAI]: { key: SECRET_KEYS.AZURE_OPENAI, selector: '#api_key_azure_openai', proxy: false },
@@ -6134,6 +6171,8 @@ function toggleChatCompletionForms() {
         $('#model_pollinations_select').trigger('change');
     } else if (oai_settings.chat_completion_source == chat_completion_sources.MOONSHOT) {
         $('#model_moonshot_select').trigger('change');
+    } else if (oai_settings.chat_completion_source == chat_completion_sources.LINKAPI) {
+        $('#model_linkapi_select').trigger('change');
     } else if (oai_settings.chat_completion_source == chat_completion_sources.FIREWORKS) {
         $('#model_fireworks_select').trigger('change');
     } else if (oai_settings.chat_completion_source == chat_completion_sources.COMETAPI) {
@@ -6326,6 +6365,8 @@ export function isImageInliningSupported() {
             return true;
         case chat_completion_sources.MOONSHOT:
             return (Array.isArray(model_list) && model_list.find(m => m.id === oai_settings.moonshot_model)?.supports_image_in);
+        case chat_completion_sources.LINKAPI:
+            return (Array.isArray(model_list) && Boolean(model_list.find(m => m.id === oai_settings.linkapi_model)?.supports_image_in));
         case chat_completion_sources.NANOGPT:
             return (Array.isArray(model_list) && model_list.find(m => m.id === oai_settings.nanogpt_model)?.capabilities?.vision);
         case chat_completion_sources.ZAI:
@@ -7364,6 +7405,7 @@ export function initOpenAI() {
     $('#model_pollinations_select').on('change', onModelChange);
     $('#model_cometapi_select').on('change', onModelChange);
     $('#model_moonshot_select').on('change', onModelChange);
+    $('#model_linkapi_select').on('change', onModelChange);
     $('#model_fireworks_select').on('change', onModelChange);
     $('#azure_openai_model').on('change', onModelChange);
     $('#model_zai_select').on('change', onModelChange);

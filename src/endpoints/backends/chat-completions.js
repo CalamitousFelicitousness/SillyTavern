@@ -69,6 +69,13 @@ import {
 import { getVertexAIAuth, getProjectIdFromServiceAccount } from '../google.js';
 import { getCookieSecret } from '../../users.js';
 import { fetchGoogleModels, GoogleModelsHttpError } from './google-models.js';
+import {
+    convertChatToResponsesRequest,
+    convertResponsesToChatCompletion,
+    forwardResponsesStream,
+    matchesResponsesPattern,
+    DEFAULT_RESPONSES_PATTERN,
+} from './openai-responses.js';
 
 const API_OPENAI = 'https://api.openai.com/v1';
 const API_CLAUDE = 'https://api.anthropic.com/v1';
@@ -99,6 +106,7 @@ const API_MINIMAX = 'https://api.minimax.io/v1';
 const API_MINIMAX_CN = 'https://api.minimaxi.com/v1';
 const API_OPENROUTER = 'https://openrouter.ai/api/v1';
 const API_WORKERS_AI = 'https://api.cloudflare.com/client/v4/accounts';
+const API_LINKAPI = 'https://linkapi.ai/v1';
 
 /**
  * Module-scoped Claude caching configuration values.
@@ -1839,6 +1847,10 @@ router.post('/status', async function (request, statusResponse) {
             apiUrl = new URL(request.body.reverse_proxy || API_MOONSHOT).toString();
             apiKey = request.body.reverse_proxy ? request.body.proxy_password : readSecret(request.user.directories, SECRET_KEYS.MOONSHOT, request.body.secret_id);
             headers = {};
+        } else if (request.body.chat_completion_source === CHAT_COMPLETION_SOURCES.LINKAPI) {
+            apiUrl = new URL(request.body.reverse_proxy || API_LINKAPI).toString();
+            apiKey = request.body.reverse_proxy ? request.body.proxy_password : readSecret(request.user.directories, SECRET_KEYS.LINKAPI, request.body.secret_id);
+            headers = {};
         } else if (request.body.chat_completion_source === CHAT_COMPLETION_SOURCES.FIREWORKS) {
             apiKey = readSecret(request.user.directories, SECRET_KEYS.FIREWORKS, request.body.secret_id);
             const modelsUrl = 'https://api.fireworks.ai/v1/accounts/fireworks/models?filter=supports_serverless%3Dtrue&pageSize=200';
@@ -2530,6 +2542,24 @@ router.post('/generate', async function (request, response) {
             request.body.json_schema
                 ? setJsonObjectFormat(bodyParams, request.body.messages, request.body.json_schema)
                 : addAssistantPrefix(request.body.messages, [], 'partial');
+        } else if (request.body.chat_completion_source === CHAT_COMPLETION_SOURCES.LINKAPI) {
+            apiUrl = new URL(request.body.reverse_proxy || API_LINKAPI).toString();
+            apiKey = request.body.reverse_proxy ? request.body.proxy_password : readSecret(request.user.directories, SECRET_KEYS.LINKAPI, request.body.secret_id);
+            headers = {};
+            bodyParams = {
+                reasoning_effort: request.body.reasoning_effort,
+                verbosity: request.body.verbosity,
+            };
+            if (request.body.json_schema) {
+                bodyParams['response_format'] = {
+                    type: 'json_schema',
+                    json_schema: {
+                        name: request.body.json_schema.name,
+                        strict: request.body.json_schema.strict ?? true,
+                        schema: request.body.json_schema.value,
+                    },
+                };
+            }
         } else if (request.body.chat_completion_source === CHAT_COMPLETION_SOURCES.COMETAPI) {
             apiUrl = API_COMETAPI;
             apiKey = readSecret(request.user.directories, SECRET_KEYS.COMETAPI, request.body.secret_id);
@@ -2613,7 +2643,7 @@ router.post('/generate', async function (request, response) {
         }
 
         const textPrompt = isTextCompletion ? convertTextCompletionPrompt(request.body.messages) : '';
-        const endpointUrl = isTextCompletion && request.body.chat_completion_source !== CHAT_COMPLETION_SOURCES.OPENROUTER ?
+        let endpointUrl = isTextCompletion && request.body.chat_completion_source !== CHAT_COMPLETION_SOURCES.OPENROUTER ?
             `${apiUrl}/completions` :
             `${apiUrl}/chat/completions`;
 
@@ -2662,6 +2692,17 @@ router.post('/generate', async function (request, response) {
             excludeKeysByYaml(requestBody, request.body.custom_exclude_body);
         }
 
+        // LinkAPI serves some models (e.g. gpt-5.5-pro) only via the Responses API.
+        // Route those by model pattern and translate the request body accordingly.
+        const useResponsesApi = request.body.chat_completion_source === CHAT_COMPLETION_SOURCES.LINKAPI
+            && !isTextCompletion
+            && matchesResponsesPattern(request.body.model, request.body.linkapi_responses_pattern || DEFAULT_RESPONSES_PATTERN);
+
+        const outgoingBody = useResponsesApi ? convertChatToResponsesRequest(requestBody) : requestBody;
+        if (useResponsesApi) {
+            endpointUrl = `${apiUrl.replace(/\/$/, '')}/responses`;
+        }
+
         /** @type {import('node-fetch').RequestInit} */
         const config = {
             method: 'post',
@@ -2670,16 +2711,19 @@ router.post('/generate', async function (request, response) {
                 'Authorization': 'Bearer ' + apiKey,
                 ...headers,
             },
-            body: JSON.stringify(requestBody),
+            body: JSON.stringify(outgoingBody),
             signal: controller.signal,
         };
 
-        console.debug('Chat Completion request:', requestBody);
+        console.debug('Chat Completion request:', outgoingBody);
 
         const fetchResponse = await fetch(endpointUrl, config);
 
         if (request.body.stream) {
             console.info('Streaming request in progress');
+            if (useResponsesApi) {
+                return await forwardResponsesStream(fetchResponse, response, request.body.model);
+            }
             return await forwardFetchResponse(fetchResponse, response);
         }
 
@@ -2687,6 +2731,9 @@ router.post('/generate', async function (request, response) {
             /** @type {any} */
             const json = await fetchResponse.json();
             console.debug('Chat Completion response:', json);
+            if (useResponsesApi) {
+                return response.send(convertResponsesToChatCompletion(json));
+            }
             return response.send(json);
         } else {
             const responseText = await fetchResponse.text();
