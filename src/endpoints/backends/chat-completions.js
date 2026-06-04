@@ -2703,6 +2703,15 @@ router.post('/generate', async function (request, response) {
             endpointUrl = `${apiUrl.replace(/\/$/, '')}/responses`;
         }
 
+        // On the LinkAPI /chat/completions path, reasoning models (reasoning_effort/verbosity
+        // set) are internally routed to a reasoning backend that rejects sampling penalties
+        // ("Unsupported parameter: presence_penalty"). Temperature/top_p remain accepted.
+        if (request.body.chat_completion_source === CHAT_COMPLETION_SOURCES.LINKAPI && !useResponsesApi
+            && (request.body.reasoning_effort || request.body.verbosity)) {
+            delete requestBody.presence_penalty;
+            delete requestBody.frequency_penalty;
+        }
+
         /** @type {import('node-fetch').RequestInit} */
         const config = {
             method: 'post',
