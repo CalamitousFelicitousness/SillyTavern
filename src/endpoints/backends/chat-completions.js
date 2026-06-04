@@ -2550,6 +2550,7 @@ router.post('/generate', async function (request, response) {
                 reasoning_effort: request.body.reasoning_effort,
                 verbosity: request.body.verbosity,
             };
+            embedOpenRouterMedia(request.body.messages, { audio: true, video: true });
             if (request.body.json_schema) {
                 bodyParams['response_format'] = {
                     type: 'json_schema',

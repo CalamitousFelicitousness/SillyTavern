@@ -6366,7 +6366,9 @@ export function isImageInliningSupported() {
         case chat_completion_sources.MOONSHOT:
             return (Array.isArray(model_list) && model_list.find(m => m.id === oai_settings.moonshot_model)?.supports_image_in);
         case chat_completion_sources.LINKAPI:
-            return (Array.isArray(model_list) && Boolean(model_list.find(m => m.id === oai_settings.linkapi_model)?.supports_image_in));
+            // LinkAPI exposes no per-model modality metadata, so enable inlining for the
+            // provider and let the user pick a model that actually accepts images.
+            return true;
         case chat_completion_sources.NANOGPT:
             return (Array.isArray(model_list) && model_list.find(m => m.id === oai_settings.nanogpt_model)?.capabilities?.vision);
         case chat_completion_sources.ZAI:
@@ -6426,6 +6428,9 @@ export function isVideoInliningSupported() {
             return videoSupportedModels.some(model => oai_settings.zai_model.includes(model));
         case chat_completion_sources.CUSTOM:
             return true;
+        case chat_completion_sources.LINKAPI:
+            // No per-model modality metadata; enable for the provider and let the user decide.
+            return true;
         default:
             return false;
     }
@@ -6467,6 +6472,9 @@ export function isAudioInliningSupported() {
         case chat_completion_sources.OPENROUTER:
             return (Array.isArray(model_list) && model_list.find(m => m.id === oai_settings.openrouter_model)?.architecture?.input_modalities?.includes('audio'));
         case chat_completion_sources.CUSTOM:
+            return true;
+        case chat_completion_sources.LINKAPI:
+            // No per-model modality metadata; enable for the provider and let the user decide.
             return true;
         default:
             return false;
