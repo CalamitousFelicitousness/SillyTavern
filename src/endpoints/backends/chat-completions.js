@@ -399,9 +399,23 @@ async function sendClaudeRequest(request, response) {
             requestBody.output_config.effort = request.body.verbosity;
         }
 
-        if (betaHeaders.length) {
-            additionalHeaders['anthropic-beta'] = betaHeaders.join(',');
+        // Applied last so callers can override the fields assembled above.
+        mergeObjectWithYaml(requestBody, request.body.custom_include_body);
+        excludeKeysByYaml(requestBody, request.body.custom_exclude_body);
+
+        // anthropic-beta is unioned, not replaced, so a caller flag can't drop ours.
+        const callerHeaders = {};
+        mergeObjectWithYaml(callerHeaders, request.body.custom_include_headers);
+        if (callerHeaders['anthropic-beta']) {
+            betaHeaders.push(...String(callerHeaders['anthropic-beta']).split(',').map(x => x.trim()).filter(Boolean));
+            delete callerHeaders['anthropic-beta'];
         }
+
+        if (betaHeaders.length) {
+            additionalHeaders['anthropic-beta'] = Array.from(new Set(betaHeaders)).join(',');
+        }
+
+        Object.assign(additionalHeaders, callerHeaders);
 
         console.debug('Claude request:', requestBody);
 
