@@ -2557,6 +2557,9 @@ router.post('/generate', async function (request, response) {
             if (request.body.reasoning_effort) {
                 bodyParams['reasoning_effort'] = request.body.reasoning_effort;
             }
+            // Applied last so callers can override the fields assembled above.
+            mergeObjectWithYaml(bodyParams, request.body.custom_include_body);
+            mergeObjectWithYaml(headers, request.body.custom_include_headers);
             request.body.json_schema
                 ? setJsonObjectFormat(bodyParams, request.body.messages, request.body.json_schema)
                 : addAssistantPrefix(request.body.messages, [], 'partial');
@@ -2707,7 +2710,7 @@ router.post('/generate', async function (request, response) {
             ...bodyParams,
         };
 
-        if (request.body.chat_completion_source === CHAT_COMPLETION_SOURCES.CUSTOM) {
+        if ([CHAT_COMPLETION_SOURCES.CUSTOM, CHAT_COMPLETION_SOURCES.MOONSHOT].includes(request.body.chat_completion_source)) {
             excludeKeysByYaml(requestBody, request.body.custom_exclude_body);
         }
 
