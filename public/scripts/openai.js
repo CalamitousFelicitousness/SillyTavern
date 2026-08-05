@@ -2582,6 +2582,7 @@ function getReasoningEffort(settings = null, model = null) {
         chat_completion_sources.CHUTES,
         chat_completion_sources.DEEPSEEK,
         chat_completion_sources.FIREWORKS,
+        chat_completion_sources.MOONSHOT,
     ];
 
     if (!reasoningEffortSources.includes(settings.chat_completion_source)) {
@@ -2611,6 +2612,27 @@ function getReasoningEffort(settings = null, model = null) {
                     return reasoning_effort_types.low;
                 default:
                     return settings.reasoning_effort;
+            }
+        }
+
+        if (settings.chat_completion_source === chat_completion_sources.MOONSHOT) {
+            // Only Kimi K3 takes think efforts, and only low/high/max.
+            // Unknown values are not rejected, they silently fall back to max.
+            if (!/kimi-k3/.test(model)) {
+                return undefined;
+            }
+
+            switch (settings.reasoning_effort) {
+                case reasoning_effort_types.min:
+                case reasoning_effort_types.low:
+                    return 'low';
+                case reasoning_effort_types.medium:
+                case reasoning_effort_types.high:
+                    return 'high';
+                case reasoning_effort_types.max:
+                    return 'max';
+                default:
+                    return undefined;
             }
         }
 
@@ -2803,7 +2825,9 @@ export async function createGenerationParameters(settings, model, type, messages
     const stream = settings.stream_openai && type !== 'quiet' && !isO1 && !isWorkersAIJsonMode;
 
     const noMultiSwipeTypes = ['quiet', 'impersonate', 'continue'];
-    const canMultiSwipe = settings.n > 1 && !noMultiSwipeTypes.includes(type) && multiswipeSources.includes(settings.chat_completion_source);
+    // Kimi K3 rejects n > 1.
+    const noMultiSwipeModel = settings.chat_completion_source === chat_completion_sources.MOONSHOT && /kimi-k3/.test(model);
+    const canMultiSwipe = settings.n > 1 && !noMultiSwipeTypes.includes(type) && !noMultiSwipeModel && multiswipeSources.includes(settings.chat_completion_source);
 
     let logit_bias = {};
     if (settings.bias_preset_selected
@@ -3053,7 +3077,8 @@ export async function createGenerationParameters(settings, model, type, messages
     // https://platform.moonshot.ai/docs/api/chat#public-service-address
     if (settings.chat_completion_source === chat_completion_sources.MOONSHOT) {
         // >Kimi API is fully compatible with OpenAI's API format
-        if (/kimi-k2.5/.test(model)) {
+        // These models pin sampling server-side and 400 on any other value.
+        if (/kimi-k2\.5|kimi-k3/.test(model)) {
             delete generate_data.temperature;
             delete generate_data.top_p;
             delete generate_data.frequency_penalty;
@@ -5391,6 +5416,10 @@ function getMoonshotMaxContext(model, isUnlocked) {
         'kimi-k2-turbo-preview': max_256k,
         'kimi-k2-thinking': max_256k,
         'kimi-k2-thinking-turbo': max_256k,
+        'kimi-k2.6': max_256k,
+        'kimi-k2.7-code-highspeed': max_256k,
+        'kimi-k2.7-code': max_256k,
+        'kimi-k3': max_1mil,
     };
 
     // Return context size if model found, otherwise default to 32k
@@ -6309,6 +6338,10 @@ export function isImageInliningSupported() {
         'moonshot-v1-32k-vision-preview',
         'moonshot-v1-128k-vision-preview',
         'kimi-k2.5',
+        'kimi-k2.6',
+        'kimi-k2.7-code',
+        'kimi-k2.7-code-highspeed',
+        'kimi-k3',
         'kimi-latest',
         // DeepSeek
         'deepseek-v4-flash-vision-exp',

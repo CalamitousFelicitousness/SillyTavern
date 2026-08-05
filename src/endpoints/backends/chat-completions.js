@@ -2553,6 +2553,10 @@ router.post('/generate', async function (request, response) {
                     type: request.body.include_reasoning ? 'enabled' : 'disabled',
                 },
             };
+            // Only Kimi K3 takes think efforts; the frontend resolves the value.
+            if (request.body.reasoning_effort) {
+                bodyParams['reasoning_effort'] = request.body.reasoning_effort;
+            }
             request.body.json_schema
                 ? setJsonObjectFormat(bodyParams, request.body.messages, request.body.json_schema)
                 : addAssistantPrefix(request.body.messages, [], 'partial');
