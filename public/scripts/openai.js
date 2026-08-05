@@ -263,6 +263,7 @@ export const tool_reasoning_modes = {
 const interleaved_reasoning_providers = [
     chat_completion_sources.OPENROUTER,
     chat_completion_sources.CUSTOM,
+    chat_completion_sources.MOONSHOT,
 ];
 
 export const ZAI_ENDPOINT = {
@@ -325,6 +326,8 @@ export const settingsToUpdate = {
     openrouter_allow_fallbacks: ['#openrouter_allow_fallbacks', 'openrouter_allow_fallbacks', true, true],
     openrouter_middleout: ['#openrouter_middleout', 'openrouter_middleout', false, true],
     tool_reasoning_mode: ['#tool_reasoning_mode', 'tool_reasoning_mode', false, false],
+    moonshot_reasoning_replay: ['#moonshot_reasoning_replay', 'moonshot_reasoning_replay', true, false],
+    moonshot_reasoning_replay_depth: ['#moonshot_reasoning_replay_depth', 'moonshot_reasoning_replay_depth', false, false],
     ai21_model: ['#model_ai21_select', 'ai21_model', false, true],
     mistralai_model: ['#model_mistralai_select', 'mistralai_model', false, true],
     cohere_model: ['#model_cohere_select', 'cohere_model', false, true],
@@ -488,6 +491,8 @@ const default_settings = {
     openrouter_allow_fallbacks: true,
     openrouter_middleout: openrouter_middleout_types.ON,
     tool_reasoning_mode: tool_reasoning_modes.DISABLED,
+    moonshot_reasoning_replay: false,
+    moonshot_reasoning_replay_depth: 4,
     reverse_proxy: '',
     chat_completion_source: chat_completion_sources.OPENAI,
     max_context_unlocked: false,
@@ -947,6 +952,12 @@ async function populateChatHistory(messages, prompts, chatCompletion, type = nul
         ? getEffectiveToolReasoningMode()
         : tool_reasoning_modes.DISABLED;
     const includeToolReasoning = toolReasoningMode !== tool_reasoning_modes.DISABLED;
+    // Opt-in: replayed reasoning is billed as input on every later request.
+    const replayReasoning = oai_settings.chat_completion_source === chat_completion_sources.MOONSHOT
+        && !!oai_settings.moonshot_reasoning_replay
+        && oai_settings.show_thoughts;
+    const replayDepth = Math.max(0, Number(oai_settings.moonshot_reasoning_replay_depth) || 0);
+    let replayedReasoningCount = 0;
     const lastUserIdx = messages.findLastIndex(x => x.role === 'user');
 
     // Insert chat messages as long as there is budget available
@@ -1070,6 +1081,15 @@ async function populateChatHistory(messages, prompts, chatCompletion, type = nul
 
         if (includeSignature && chatPrompt.signature) {
             chatMessage.signature = chatPrompt.signature;
+        }
+
+        // Iterated newest-first, so this keeps the most recent N turns.
+        if (replayReasoning
+            && chatMessage.role === 'assistant'
+            && chatPrompt.reasoning
+            && replayedReasoningCount < replayDepth) {
+            await chatMessage.setReasoning(chatPrompt.reasoning);
+            replayedReasoningCount++;
         }
 
         if (chatCompletion.canAfford(chatMessage)) {
@@ -3631,6 +3651,20 @@ class Message {
     }
 
     /**
+     * Attach replayed reasoning and recount tokens for the budget.
+     * @param {string} reasoning Reasoning text to replay.
+     * @returns {Promise<void>}
+     */
+    async setReasoning(reasoning) {
+        this.reasoning = reasoning;
+        this.tokens = await tokenHandler.countAsync({
+            role: this.role,
+            ...(typeof this.content === 'string' && this.content ? { content: this.content } : {}),
+            ...(this.reasoning ? { reasoning: this.reasoning } : {}),
+        });
+    }
+
+    /**
      * Add a name to the message.
      * @param {string} name Name to set for the message.
      * @returns {Promise<void>}
@@ -4493,6 +4527,8 @@ function setToolReasoningControls() {
     const isEnabled = oai_settings.show_thoughts;
     $('#tool_reasoning_mode').prop('disabled', !isEnabled);
     $('#openrouter_interleaved_thinking_disabled_hint').toggle(!isEnabled);
+    $('#moonshot_reasoning_replay').prop('disabled', !isEnabled);
+    $('#moonshot_reasoning_replay_depth').prop('disabled', !isEnabled);
 }
 
 async function getStatusOpen() {
@@ -7139,6 +7175,16 @@ export function initOpenAI() {
             ...oai_settings,
             tool_reasoning_mode: String($(this).val()),
         });
+        saveSettingsDebounced();
+    });
+
+    $('#moonshot_reasoning_replay').on('input', function () {
+        oai_settings.moonshot_reasoning_replay = !!$(this).prop('checked');
+        saveSettingsDebounced();
+    });
+
+    $('#moonshot_reasoning_replay_depth').on('input', function () {
+        oai_settings.moonshot_reasoning_replay_depth = Math.max(0, Number($(this).val()) || 0);
         saveSettingsDebounced();
     });
 

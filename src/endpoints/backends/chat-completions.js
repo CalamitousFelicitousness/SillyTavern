@@ -2557,6 +2557,16 @@ router.post('/generate', async function (request, response) {
             if (request.body.reasoning_effort) {
                 bodyParams['reasoning_effort'] = request.body.reasoning_effort;
             }
+            // ST carries replayed reasoning as `reasoning`; Moonshot wants
+            // `reasoning_content`. Silently ignored otherwise.
+            if (Array.isArray(request.body.messages)) {
+                for (const message of request.body.messages) {
+                    if (message.role === 'assistant' && message.reasoning) {
+                        message.reasoning_content = message.reasoning;
+                    }
+                    delete message.reasoning;
+                }
+            }
             // Applied last so callers can override the fields assembled above.
             mergeObjectWithYaml(bodyParams, request.body.custom_include_body);
             mergeObjectWithYaml(headers, request.body.custom_include_headers);

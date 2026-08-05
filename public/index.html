@@ -2029,7 +2029,7 @@
                                             </div>
                                         </div>
                                     </div>
-                                    <div class="range-block" data-source="openrouter,custom">
+                                    <div class="range-block" data-source="openrouter,custom,moonshot">
                                         <div class="flex-container flexFlowColumn wide100p textAlignCenter marginTop10">
                                             <div class="flex-container oneline-dropdown">
                                                 <label for="tool_reasoning_mode" data-i18n="Interleaved Thinking">
@@ -2051,6 +2051,23 @@
                                             <em data-i18n="Enable &quot;Request model reasoning&quot; to use Interleaved Thinking.">
                                                 Enable "Request model reasoning" to use Interleaved Thinking.
                                             </em>
+                                        </div>
+                                    </div>
+                                    <div class="range-block" data-source="moonshot">
+                                        <label for="moonshot_reasoning_replay" class="checkbox_label flexWrap widthFreeExpand">
+                                            <input id="moonshot_reasoning_replay" type="checkbox" />
+                                            <span data-i18n="Replay Reasoning History">Replay Reasoning History</span>
+                                        </label>
+                                        <div class="toggle-description justifyLeft">
+                                            <span data-i18n="moonshot_reasoning_replay_hint">
+                                                Sends reasoning from preceding assistant turns back to the model. Billed as input on every later request, so keep the depth low.
+                                            </span>
+                                        </div>
+                                        <div class="flex-container flexFlowColumn wide100p marginTop10">
+                                            <label for="moonshot_reasoning_replay_depth">
+                                                <small data-i18n="Replay depth (assistant turns)">Replay depth (assistant turns)</small>
+                                            </label>
+                                            <input id="moonshot_reasoning_replay_depth" class="text_pole" type="number" min="0" max="50" step="1" />
                                         </div>
                                     </div>
                                     <div class="range-block" data-source="openai,aimlapi,openrouter,mistralai,makersuite,vertexai,claude,custom,xai,pollinations,moonshot,linkapi,cohere,cometapi,nanogpt,electronhub,azure_openai,zai,siliconflow,chutes,workers_ai">
