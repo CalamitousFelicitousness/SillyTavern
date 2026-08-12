@@ -11,12 +11,14 @@ import {
 } from '../script.js';
 import { selected_group } from './group-chats.js';
 import { extension_settings, getContext, saveMetadataDebounced } from './extensions.js';
-import { getCharaFilename, debounce, delay } from './utils.js';
+import { getCharaFilename, debounce, delay, equalsIgnoreCaseAndAccents, uuidv4 } from './utils.js';
+import { Popup, POPUP_RESULT } from './popup.js';
 import { getTokenCountAsync } from './tokenizers.js';
 import { debounce_timeout } from './constants.js';
 import { SlashCommandParser } from './slash-commands/SlashCommandParser.js';
 import { SlashCommand } from './slash-commands/SlashCommand.js';
 import { ARGUMENT_TYPE, SlashCommandArgument } from './slash-commands/SlashCommandArgument.js';
+import { SlashCommandEnumValue } from './slash-commands/SlashCommandEnumValue.js';
 export { MODULE_NAME as NOTE_MODULE_NAME };
 import { t } from './i18n.js';
 import { macros, MacroCategory } from './macros/macro-system.js';
@@ -33,6 +35,7 @@ export const metadata_keys = {
     depth: 'note_depth',
     position: 'note_position',
     role: 'note_role',
+    preset: 'note_preset',
 };
 
 const chara_note_position = {
@@ -40,6 +43,253 @@ const chara_note_position = {
     before: 1,
     after: 2,
 };
+
+/**
+ * @typedef {object} NotePreset
+ * @property {string} id Stable identifier. Survives renames, so chats keep their binding.
+ * @property {string} name Display name.
+ * @property {string} prompt Author's Note text.
+ * @property {number} position Insertion position. See extension_prompt_types.
+ * @property {number} depth In-chat insertion depth.
+ * @property {number} role In-chat insertion role. See extension_prompt_roles.
+ * @property {number} interval Insertion frequency.
+ * @property {boolean} allowWIScan Include in World Info scanning. This one is a global setting.
+ */
+
+/**
+ * Gets the saved Author's Note presets, creating the list if it's missing.
+ * @returns {NotePreset[]} Saved presets
+ */
+function getNotePresets() {
+    if (!Array.isArray(extension_settings.note.presets)) {
+        extension_settings.note.presets = [];
+    }
+
+    return extension_settings.note.presets;
+}
+
+/**
+ * Gets the preset the current chat is bound to.
+ * @returns {NotePreset|undefined} Bound preset, if any
+ */
+function getSelectedNotePreset() {
+    const id = chat_metadata[metadata_keys.preset];
+    return id ? getNotePresets().find(p => p.id === id) : undefined;
+}
+
+/**
+ * Snapshots the live Author's Note state in preset shape.
+ * @param {string} id Preset id
+ * @param {string} name Preset name
+ * @returns {NotePreset} Snapshot of the current state
+ */
+function captureNoteState(id, name) {
+    return {
+        id: id,
+        name: name,
+        prompt: String(chat_metadata[metadata_keys.prompt] ?? ''),
+        position: Number(chat_metadata[metadata_keys.position]),
+        depth: Number(chat_metadata[metadata_keys.depth]),
+        role: Number(chat_metadata[metadata_keys.role]),
+        interval: Number(chat_metadata[metadata_keys.interval]),
+        allowWIScan: !!extension_settings.note.allowWIScan,
+    };
+}
+
+/**
+ * Checks if the live Author's Note has drifted from the preset it was loaded from.
+ * Drives the "(modified)" marker in the preset dropdown.
+ *
+ * Any difference counts: text, settings, and whitespace alike, including settings
+ * that are inert at the current insertion position.
+ *
+ * @param {NotePreset} preset Preset to compare against
+ * @returns {boolean} True if the live state differs from the preset
+ */
+function isNoteStateModified(preset) {
+    const current = captureNoteState(preset.id, preset.name);
+    return Object.keys(current).some(key => current[key] !== preset[key]);
+}
+
+/**
+ * Loads a preset into the current chat's Author's Note.
+ * @param {NotePreset} preset Preset to apply
+ */
+function applyNotePreset(preset) {
+    chat_metadata[metadata_keys.prompt] = preset.prompt ?? '';
+    chat_metadata[metadata_keys.position] = Number(preset.position ?? extension_settings.note.defaultPosition);
+    chat_metadata[metadata_keys.depth] = Number(preset.depth ?? extension_settings.note.defaultDepth);
+    chat_metadata[metadata_keys.role] = Number(preset.role ?? extension_settings.note.defaultRole);
+    chat_metadata[metadata_keys.interval] = Number(preset.interval ?? extension_settings.note.defaultInterval);
+    chat_metadata[metadata_keys.preset] = preset.id;
+    extension_settings.note.allowWIScan = !!preset.allowWIScan;
+
+    setMainPromptTokenCounterDebounced(chat_metadata[metadata_keys.prompt]);
+    updateSettings();
+    saveMetadataDebounced();
+}
+
+/**
+ * Repaints the preset dropdown to match the saved presets and the current binding.
+ * Cheap to call often: bails out unless something it renders actually changed.
+ */
+function syncNotePresetControls() {
+    const select = $('#note_preset_select');
+
+    if (!select.length) {
+        return;
+    }
+
+    const presets = getNotePresets();
+    const selected = getSelectedNotePreset();
+    const modified = selected ? isNoteStateModified(selected) : false;
+    const signature = JSON.stringify([presets.map(p => [p.id, p.name]), selected?.id ?? '', modified]);
+
+    if (select.data('signature') === signature) {
+        return;
+    }
+
+    select.data('signature', signature);
+    select.empty();
+    select.append($('<option></option>', { value: '', text: t`--- Pick to load ---` }));
+
+    for (const preset of presets) {
+        const isSelected = preset === selected;
+        select.append($('<option></option>', {
+            value: preset.id,
+            text: isSelected && modified ? `${preset.name} ${t`(modified)`}` : preset.name,
+        }));
+    }
+
+    select.val(selected?.id ?? '');
+}
+
+async function onNotePresetSelectChange() {
+    const id = String($(this).val() ?? '');
+
+    if (!id) {
+        chat_metadata[metadata_keys.preset] = '';
+        saveMetadataDebounced();
+        syncNotePresetControls();
+        return;
+    }
+
+    const preset = getNotePresets().find(p => p.id === id);
+
+    if (!preset) {
+        toastr.error(t`Author's Note preset not found`);
+        return;
+    }
+
+    applyNotePreset(preset);
+}
+
+async function onNotePresetUpdateClick() {
+    const preset = getSelectedNotePreset();
+
+    if (!preset) {
+        return await onNotePresetNewClick();
+    }
+
+    Object.assign(preset, captureNoteState(preset.id, preset.name));
+    saveSettingsDebounced();
+    syncNotePresetControls();
+    toastr.success(t`Author's Note preset updated`);
+}
+
+async function onNotePresetNewClick() {
+    const name = (await Popup.show.input(t`Preset name:`, null, getSelectedNotePreset()?.name ?? ''))?.trim();
+
+    if (!name) {
+        return;
+    }
+
+    const existing = getNotePresets().find(p => equalsIgnoreCaseAndAccents(p.name, name));
+
+    if (existing) {
+        const result = await Popup.show.confirm(t`Overwrite preset?`, t`A preset with this name already exists.`);
+
+        if (result !== POPUP_RESULT.AFFIRMATIVE) {
+            return;
+        }
+
+        Object.assign(existing, captureNoteState(existing.id, existing.name));
+        chat_metadata[metadata_keys.preset] = existing.id;
+    } else {
+        const preset = captureNoteState(uuidv4(), name);
+        getNotePresets().push(preset);
+        chat_metadata[metadata_keys.preset] = preset.id;
+    }
+
+    saveSettingsDebounced();
+    saveMetadataDebounced();
+    syncNotePresetControls();
+    toastr.success(t`Author's Note preset saved`);
+}
+
+async function onNotePresetRenameClick() {
+    const preset = getSelectedNotePreset();
+
+    if (!preset) {
+        toastr.info(t`No Author's Note preset selected`);
+        return;
+    }
+
+    const name = (await Popup.show.input(t`Rename preset:`, null, preset.name))?.trim();
+
+    if (!name || name === preset.name) {
+        return;
+    }
+
+    if (getNotePresets().some(p => p !== preset && equalsIgnoreCaseAndAccents(p.name, name))) {
+        toastr.error(t`A preset with this name already exists`);
+        return;
+    }
+
+    preset.name = name;
+    saveSettingsDebounced();
+    syncNotePresetControls();
+    toastr.success(t`Author's Note preset renamed`);
+}
+
+async function onNotePresetDeleteClick() {
+    const preset = getSelectedNotePreset();
+
+    if (!preset) {
+        toastr.info(t`No Author's Note preset selected`);
+        return;
+    }
+
+    const result = await Popup.show.confirm(t`Delete preset?`, preset.name);
+
+    if (result !== POPUP_RESULT.AFFIRMATIVE) {
+        return;
+    }
+
+    const presets = getNotePresets();
+    presets.splice(presets.indexOf(preset), 1);
+    chat_metadata[metadata_keys.preset] = '';
+    saveSettingsDebounced();
+    saveMetadataDebounced();
+    syncNotePresetControls();
+    toastr.success(t`Author's Note preset deleted`);
+}
+
+async function setNotePresetCommand(_, name) {
+    if (name) {
+        const preset = getNotePresets().find(p => equalsIgnoreCaseAndAccents(p.name, String(name).trim()));
+
+        if (!preset) {
+            toastr.error(t`Author's Note preset not found`);
+            return '';
+        }
+
+        applyNotePreset(preset);
+        toastr.success(t`Author's Note preset applied`);
+    }
+
+    return getSelectedNotePreset()?.name ?? '';
+}
 
 function setNoteTextCommand(_, text) {
     if (text) {
@@ -295,6 +545,7 @@ function loadSettings() {
     chat_metadata[metadata_keys.position] = chat_metadata[metadata_keys.position] ?? extension_settings.note.defaultPosition ?? DEFAULT_POSITION;
     chat_metadata[metadata_keys.depth] = chat_metadata[metadata_keys.depth] ?? extension_settings.note.defaultDepth ?? DEFAULT_DEPTH;
     chat_metadata[metadata_keys.role] = chat_metadata[metadata_keys.role] ?? extension_settings.note.defaultRole ?? DEFAULT_ROLE;
+    chat_metadata[metadata_keys.preset] = chat_metadata[metadata_keys.preset] ?? '';
     $('#extension_floating_prompt').val(chat_metadata[metadata_keys.prompt]);
     $('#extension_floating_interval').val(chat_metadata[metadata_keys.interval]);
     $('#extension_floating_allow_wi_scan').prop('checked', extension_settings.note.allowWIScan ?? false);
@@ -319,6 +570,8 @@ function loadSettings() {
     $('#extension_default_interval').val(extension_settings.note.defaultInterval);
     $('#extension_default_role').val(extension_settings.note.defaultRole);
     $(`input[name="extension_default_position"][value="${extension_settings.note.defaultPosition}"]`).prop('checked', true);
+
+    syncNotePresetControls();
 }
 
 export function setFloatingPrompt() {
@@ -497,6 +750,11 @@ export function initAuthorsNote() {
         setTimeout(function () { $('#floatingPrompt').hide(); }, animation_duration);
     });
     $('#option_toggle_AN').on('click', onANMenuItemClick);
+    $('#note_preset_select').on('change', onNotePresetSelectChange);
+    $('#note_preset_update').on('click', onNotePresetUpdateClick);
+    $('#note_preset_rename').on('click', onNotePresetRenameClick);
+    $('#note_preset_new').on('click', onNotePresetNewClick);
+    $('#note_preset_delete').on('click', onNotePresetDeleteClick);
 
     SlashCommandParser.addCommandObject(SlashCommand.fromProps({
         name: 'note',
@@ -576,6 +834,24 @@ export function initAuthorsNote() {
         helpString: `
             <div>
                 Sets an author's note chat insertion role if specified and returns the current role.
+            </div>
+        `,
+    }));
+    SlashCommandParser.addCommandObject(SlashCommand.fromProps({
+        name: 'note-preset',
+        callback: setNotePresetCommand,
+        returns: 'name of the active author\'s note preset',
+        namedArgumentList: [],
+        unnamedArgumentList: [
+            SlashCommandArgument.fromProps({
+                description: 'preset name',
+                typeList: [ARGUMENT_TYPE.STRING],
+                enumProvider: () => getNotePresets().map(p => new SlashCommandEnumValue(p.name)),
+            }),
+        ],
+        helpString: `
+            <div>
+                Loads an author's note preset into the current chat if specified and returns the active preset name.
             </div>
         `,
     }));

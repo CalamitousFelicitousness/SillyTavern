@@ -150,6 +150,8 @@ export const extension_settings = {
         default: '',
         chara: [],
         wiAddition: [],
+        /** @type {import('./authors-note.js').NotePreset[]} */
+        presets: [],
     },
     caption: {
         refine_mode: false,

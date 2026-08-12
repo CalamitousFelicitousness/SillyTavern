@@ -7798,6 +7798,15 @@
                             <b data-i18n="Unique to this chat">Unique to this chat</b>.<br>
                             <span data-i18n="Checkpoints inherit the Note from their parent, and can be changed individually after that.">Checkpoints inherit the Note from their parent, and can be changed individually after that.</span><br>
                         </small>
+                        <div class="flex-container alignItemsCenter" title="Author's Note preset" data-i18n="[title]Author's Note preset">
+                            <select id="note_preset_select" class="flex1 text_pole"></select>
+                            <div class="flex-container justifyCenter gap3px">
+                                <i id="note_preset_update" class="menu_button fa-solid fa-save" title="Update current preset" data-i18n="[title]Update current preset"></i>
+                                <i id="note_preset_rename" class="menu_button fa-solid fa-pencil" title="Rename current preset" data-i18n="[title]Rename current preset"></i>
+                                <i id="note_preset_new" class="menu_button fa-solid fa-file-circle-plus" title="Save as new preset" data-i18n="[title]Save as new preset"></i>
+                                <i id="note_preset_delete" class="menu_button fa-solid fa-trash-can" title="Delete current preset" data-i18n="[title]Delete current preset"></i>
+                            </div>
+                        </div>
                         <textarea id="extension_floating_prompt" data-macros class="text_pole textarea_compact" rows="8"></textarea>
                         <div class="extension_token_counter">
                             <span data-i18n="extension_token_counter">Tokens:</span> <span id="extension_floating_prompt_token_counter">0</span>
