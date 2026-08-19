@@ -1150,6 +1150,10 @@ async function sendDeepSeekRequest(request, response) {
             ...bodyParams,
         };
 
+        // Applied last so callers can override the fields assembled above.
+        mergeObjectWithYaml(requestBody, request.body.custom_include_body);
+        excludeKeysByYaml(requestBody, request.body.custom_exclude_body);
+
         const config = {
             method: 'POST',
             headers: {
@@ -1255,6 +1259,11 @@ async function sendXaiRequest(request, response) {
             'n': request.body.n,
             ...bodyParams,
         };
+
+        // Applied last so callers can override the fields assembled above,
+        // including the reasoning_effort clamped to low/high further up.
+        mergeObjectWithYaml(requestBody, request.body.custom_include_body);
+        excludeKeysByYaml(requestBody, request.body.custom_exclude_body);
 
         const config = {
             method: 'POST',
@@ -2615,6 +2624,10 @@ router.post('/generate', async function (request, response) {
             if (request.body.json_schema) {
                 setJsonObjectFormat(bodyParams, request.body.messages, request.body.json_schema);
             }
+
+            // Applied last so callers can override the fields assembled above.
+            mergeObjectWithYaml(bodyParams, request.body.custom_include_body);
+            mergeObjectWithYaml(headers, request.body.custom_include_headers);
         } else if (request.body.chat_completion_source === CHAT_COMPLETION_SOURCES.SILICONFLOW) {
             const defaultApiUrl = request.body.siliconflow_endpoint === SILICONFLOW_ENDPOINT.CN
                 ? API_SILICONFLOW_CN : API_SILICONFLOW;
@@ -2720,7 +2733,7 @@ router.post('/generate', async function (request, response) {
             ...bodyParams,
         };
 
-        if ([CHAT_COMPLETION_SOURCES.CUSTOM, CHAT_COMPLETION_SOURCES.MOONSHOT].includes(request.body.chat_completion_source)) {
+        if ([CHAT_COMPLETION_SOURCES.CUSTOM, CHAT_COMPLETION_SOURCES.MOONSHOT, CHAT_COMPLETION_SOURCES.ZAI].includes(request.body.chat_completion_source)) {
             excludeKeysByYaml(requestBody, request.body.custom_exclude_body);
         }
 
