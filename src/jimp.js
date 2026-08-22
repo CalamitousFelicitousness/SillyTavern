@@ -1,3 +1,6 @@
+import fs from 'node:fs';
+import { fileURLToPath } from 'node:url';
+
 import { createJimp } from '@jimp/core';
 
 // Optimized image formats
@@ -43,6 +46,58 @@ const defaultPlugins = [
     threshold.methods,
     quantize.methods,
 ];
+
+/** Marks the patched fetch so a re-import cannot wrap it twice. */
+const CODEC_FETCH_PATCHED = Symbol.for('sillytavern.jsquashFetchPatched');
+
+// @jsquash codecs load their .wasm via fetch() on a file: URL, which undici
+// refuses ("not implemented... yet..."), breaking png/jpeg/webp/avif in Node.
+// wasm-bindgen passes a URL, emscripten passes new URL(...).href as a string.
+// Scoped to codec .wasm paths so the file: rejection in the private request
+// filter still holds everywhere else. https://github.com/jimp-dev/jimp/issues/1366
+const CODEC_WASM_PATH = /[\\/]node_modules[\\/]@jsquash[\\/].+\.wasm$/;
+
+/** Emscripten re-inits per decode, so avoid re-reading the same file. @type {Map<string, Buffer>} */
+const codecWasmCache = new Map();
+
+if (!globalThis.fetch[CODEC_FETCH_PATCHED]) {
+    const nativeFetch = globalThis.fetch;
+
+    const toFileUrl = (input) => {
+        try {
+            if (input instanceof URL) {
+                return input;
+            }
+            return typeof input === 'string' && input.startsWith('file:') ? new URL(input) : null;
+        } catch {
+            return null;
+        }
+    };
+
+    const patched = async function (input, init) {
+        const url = toFileUrl(input);
+
+        if (url?.protocol === 'file:') {
+            const filePath = fileURLToPath(url);
+
+            if (CODEC_WASM_PATH.test(filePath)) {
+                if (!codecWasmCache.has(filePath)) {
+                    codecWasmCache.set(filePath, fs.readFileSync(filePath));
+                }
+
+                return new Response(codecWasmCache.get(filePath), {
+                    status: 200,
+                    headers: { 'Content-Type': 'application/wasm' },
+                });
+            }
+        }
+
+        return nativeFetch(input, init);
+    };
+
+    patched[CODEC_FETCH_PATCHED] = true;
+    globalThis.fetch = patched;
+}
 
 // A custom jimp that uses WASM for optimized formats and JS for the rest
 const Jimp = createJimp({
