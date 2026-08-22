@@ -56,6 +56,7 @@ import {
     cachingSystemPromptForOpenRouter,
     addOpenRouterSignatures,
 } from '../../prompt-converters.js';
+import { convertDeepSeekImagesToFiles } from '../../deepseek-files.js';
 
 import { readSecret, SECRET_KEYS } from '../secrets.js';
 import {
@@ -1132,6 +1133,7 @@ async function sendDeepSeekRequest(request, response) {
         const processedMessages = addAssistantPrefix(postProcessPrompt(request.body.messages, PROMPT_PROCESSING_TYPE.SEMI_TOOLS, getPromptNames(request)), bodyParams.tools, 'prefix');
         addReasoningContentToToolCalls(processedMessages);
         sanitizeDeepSeekImages(processedMessages);
+        await convertDeepSeekImagesToFiles(processedMessages, { apiKey, apiUrl });
 
         if (request.body.include_reasoning && request.body.reasoning_effort) {
             bodyParams['reasoning_effort'] = request.body.reasoning_effort;
