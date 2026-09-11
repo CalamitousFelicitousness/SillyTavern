@@ -2754,20 +2754,6 @@ export async function createGenerationParameters(settings, model, type, messages
     }
     messages = messages.filter(msg => msg && typeof msg === 'object');
 
-    // DeepSeek only accepts image blocks in user messages. Media can also be
-    // attached to system and assistant messages by the shared inlining path.
-    const isDeepSeekVisionModel = typeof model === 'string' && model.toLowerCase().includes('deepseek-v4-flash-vision-exp');
-    if (isDeepSeekVisionModel) {
-        messages = messages.flatMap((message) => {
-            if (!['system', 'assistant'].includes(message.role) || !Array.isArray(message.content)) {
-                return [message];
-            }
-
-            const content = message.content.filter(block => block?.type !== 'image_url');
-            return content.length > 0 ? [{ ...message, content }] : [];
-        });
-    }
-
     // "OpenAI-like" sources
     const gptSources = [
         chat_completion_sources.OPENAI,
@@ -6445,6 +6431,7 @@ export function isImageInliningSupported() {
         case chat_completion_sources.SILICONFLOW:
             return visionSupportedModels.some(model => oai_settings.siliconflow_model.includes(model));
         case chat_completion_sources.DEEPSEEK:
+            // DeepSeek's /models returns id/object/owned_by only, no modality metadata.
             return visionSupportedModels.some(model => oai_settings.deepseek_model.includes(model));
         case chat_completion_sources.WORKERS_AI: {
             const waiModel = Array.isArray(model_list) && model_list.find(m => m.id === oai_settings.workers_ai_model);

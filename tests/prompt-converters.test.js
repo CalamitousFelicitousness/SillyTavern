@@ -289,6 +289,83 @@ describe('addReasoningContentToToolCalls', () => {
 });
 
 
+describe('sanitizeDeepSeekImages', () => {
+    const img = (n) => ({ type: 'image_url', image_url: { url: `data:image/png;base64,IMG${n}` } });
+    const txt = (t) => ({ type: 'text', text: t });
+
+    test('prepends images into the following user message', () => {
+        const messages = [
+            { role: 'user', content: 'hi' },
+            { role: 'assistant', content: [txt('here you go'), img(1)] },
+            { role: 'user', content: [txt('what is that?')] },
+        ];
+        mod.sanitizeDeepSeekImages(messages);
+        expect(messages[1].content).toEqual([txt('here you go')]);
+        expect(messages[2].content).toEqual([img(1), txt('what is that?')]);
+    });
+
+    test('appends to the previous user message when no user turn follows', () => {
+        const messages = [
+            { role: 'user', content: 'draw me something' },
+            { role: 'assistant', content: [txt('done'), img(2)] },
+        ];
+        mod.sanitizeDeepSeekImages(messages);
+        expect(messages[0].content).toEqual([txt('draw me something'), img(2)]);
+        expect(messages[1].content).toEqual([txt('done')]);
+    });
+
+    test('keeps chronological order when several turns hoist to one target', () => {
+        const messages = [
+            { role: 'assistant', content: [img(1)] },
+            { role: 'assistant', content: [img(2)] },
+            { role: 'user', content: [txt('compare them')] },
+        ];
+        mod.sanitizeDeepSeekImages(messages);
+        expect(messages[2].content).toEqual([img(1), img(2), txt('compare them')]);
+    });
+
+    test('collapses an image-only message to an empty string', () => {
+        const messages = [
+            { role: 'user', content: 'x' },
+            { role: 'assistant', content: [img(9)] },
+        ];
+        mod.sanitizeDeepSeekImages(messages);
+        expect(messages[1].content).toBe('');
+    });
+
+    test('drops images when there is no user message to host them', () => {
+        const messages = [{ role: 'assistant', content: [txt('orphan'), img(7)] }];
+        mod.sanitizeDeepSeekImages(messages);
+        expect(messages[0].content).toEqual([txt('orphan')]);
+    });
+
+    test('leaves user messages and string content untouched', () => {
+        const messages = [
+            { role: 'user', content: [txt('mine'), img(3)] },
+            { role: 'assistant', content: 'plain string' },
+        ];
+        mod.sanitizeDeepSeekImages(messages);
+        expect(messages[0].content).toEqual([txt('mine'), img(3)]);
+        expect(messages[1].content).toBe('plain string');
+    });
+
+    test('hoists images out of system messages', () => {
+        const messages = [
+            { role: 'system', content: [txt('sys'), img(4)] },
+            { role: 'user', content: [txt('go')] },
+        ];
+        mod.sanitizeDeepSeekImages(messages);
+        expect(messages[0].content).toEqual([txt('sys')]);
+        expect(messages[1].content).toEqual([img(4), txt('go')]);
+    });
+
+    test('handles non-array input gracefully', () => {
+        expect(() => mod.sanitizeDeepSeekImages(null)).not.toThrow();
+        expect(() => mod.sanitizeDeepSeekImages('string')).not.toThrow();
+    });
+});
+
+
 describe('embedOpenRouterMedia', () => {
     test('converts audio data URLs to input_audio format', () => {
         const messages = [{

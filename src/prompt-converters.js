@@ -1389,6 +1389,71 @@ export function addReasoningContentToToolCalls(messages) {
 }
 
 /**
+ * Reconciles image parts with DeepSeek's user-message-only rule.
+ * DeepSeek returns 400 "images in system/assistant messages" otherwise.
+ * Runs after mergeMessages, so system parts are already user; assistant is not.
+ * @param {object[]} messages Array of messages
+ * @returns {void}
+ */
+export function sanitizeDeepSeekImages(messages) {
+    if (!Array.isArray(messages)) {
+        return;
+    }
+
+    /** @type {Map<object, number>} */
+    const prependOffsets = new Map();
+
+    /** @param {object} message @returns {object[]} */
+    const asContentArray = (message) => {
+        if (!Array.isArray(message.content)) {
+            message.content = message.content ? [{ type: 'text', text: String(message.content) }] : [];
+        }
+        return message.content;
+    };
+
+    for (let i = 0; i < messages.length; i++) {
+        const message = messages[i];
+        if (message.role === 'user' || !Array.isArray(message.content)) {
+            continue;
+        }
+
+        const images = message.content.filter(p => p?.type === 'image_url');
+        if (images.length === 0) {
+            continue;
+        }
+
+        // Next user turn postdates the image, so prepend there. Otherwise fall back
+        // to the previous user turn and append.
+        let target = messages.slice(i + 1).find(m => m.role === 'user');
+        const prepend = Boolean(target);
+        if (!target) {
+            target = messages.slice(0, i).findLast(m => m.role === 'user');
+        }
+
+        // Text parts stay put; only images move.
+        message.content = message.content.filter(p => p?.type !== 'image_url');
+        if (message.content.length === 0) {
+            message.content = '';
+        }
+
+        // No user turn anywhere to host them: drop rather than send a 400.
+        if (!target) {
+            continue;
+        }
+
+        const targetContent = asContentArray(target);
+        if (prepend) {
+            // Running offset keeps multiple hoisted turns in chronological order.
+            const offset = prependOffsets.get(target) ?? 0;
+            targetContent.splice(offset, 0, ...images);
+            prependOffsets.set(target, offset + images.length);
+        } else {
+            targetContent.push(...images);
+        }
+    }
+}
+
+/**
  * Converts reasoning signatures to OpenRouter format.
  * @param {object[]} messages Array of messages
  * @param {string} model Model name
